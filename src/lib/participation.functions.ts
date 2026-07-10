@@ -29,6 +29,31 @@ async function ensureAdminRoleForKnownAccount(supabaseAdmin: any, userId: string
     .upsert({ user_id: userId, role: "admin" }, { onConflict: "user_id,role" });
 }
 
+type ExistingParticipantSeed = {
+  x_id_display: string;
+  participation_count: number;
+  win_count: number;
+  confirm_gauge: number;
+  redemption_rate: number;
+};
+
+async function getExistingParticipantSeed(
+  supabaseAdmin: any,
+  normalizedXId: string,
+): Promise<ExistingParticipantSeed | null> {
+  const { data, error } = await supabaseAdmin
+    .from("existing_participants")
+    .select("x_id_display,participation_count,win_count,confirm_gauge,redemption_rate")
+    .eq("x_id_normalized", normalizedXId)
+    .maybeSingle();
+
+  if (!error) return data ?? null;
+  if (error.code === "42P01" || error.code === "42703" || /existing_participants/i.test(error.message ?? "")) {
+    return null;
+  }
+  throw error;
+}
+
 async function deleteOrphanAuthUserByEmail(supabaseAdmin: any, email: string) {
   const { data, error } = await supabaseAdmin.auth.admin.listUsers();
   if (error) return false;
@@ -170,6 +195,16 @@ export const registerNewUser = createServerFn({ method: "POST" })
       .maybeSingle();
     if (dup) return { ok: false as const, reason: "duplicate_x_id" as const };
 
+    const seed = await getExistingParticipantSeed(supabaseAdmin, data.x_id_normalized);
+    if (data.existing) {
+      if (!seed) return { ok: false as const, reason: "existing_not_found" as const };
+      if (data.past_participation !== seed.participation_count) {
+        return { ok: false as const, reason: "participation_mismatch" as const };
+      }
+    } else if (seed) {
+      return { ok: false as const, reason: "existing_participant" as const };
+    }
+
     // Generate credentials entirely server-side — never derived from public X ID.
     const canUseAuthToken = await hasAuthTokenColumn(supabaseAdmin);
     const authToken = randomUUID();
@@ -197,17 +232,19 @@ export const registerNewUser = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "auth_failed" as const, message: createErr?.message };
     }
     const userId = created.user.id;
-    const pc = data.existing ? (data.past_participation ?? 0) : 0;
-    const gauge = calcGauge(pc);
-    const rate = calcRate(pc);
+    const pc = seed?.participation_count ?? 0;
+    const gauge = seed?.confirm_gauge ?? calcGauge(pc);
+    const rate = seed?.redemption_rate ?? calcRate(pc);
+    const winCount = seed?.win_count ?? 0;
+    const xIdDisplay = seed?.x_id_display ?? data.x_id_display;
 
     const { error: profErr } = await supabaseAdmin.from("profiles").insert({
       id: userId,
       x_id_normalized: data.x_id_normalized,
-      x_id_display: data.x_id_display,
+      x_id_display: xIdDisplay,
       ...(canUseAuthToken ? { auth_token: authToken } : {}),
       participation_count: pc,
-      win_count: 0,
+      win_count: winCount,
       redemption_rate: rate,
       confirm_gauge: gauge,
       official_follow_registered: false,
@@ -229,10 +266,23 @@ export const registerNewUser = createServerFn({ method: "POST" })
 // through this server function, never to the browser.
 export const loginWithXId = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
-    z.object({ x_id_normalized: z.string().regex(/^[a-z0-9_]{1,15}$/) }).parse(d),
+    z
+      .object({
+        x_id_normalized: z.string().regex(/^[a-z0-9_]{1,15}$/),
+        past_participation: z.number().int().min(0).max(100000).optional(),
+      })
+      .parse(d),
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    if (data.past_participation !== undefined) {
+      const seed = await getExistingParticipantSeed(supabaseAdmin, data.x_id_normalized);
+      if (!seed) return { ok: false as const, reason: "existing_not_found" as const };
+      if (seed.participation_count !== data.past_participation) {
+        return { ok: false as const, reason: "participation_mismatch" as const };
+      }
+    }
 
     const canUseAuthToken = await hasAuthTokenColumn(supabaseAdmin);
     const { data: row, error } = await supabaseAdmin

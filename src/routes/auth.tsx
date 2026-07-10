@@ -11,7 +11,7 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "ログイン / 新規登録 | 810Day毎日くじ" },
-      { name: "description", content: "X IDだけで参加できる810Day毎日くじ。" },
+      { name: "description", content: "X IDで参加できる810Day毎日くじ。" },
     ],
   }),
   component: AuthPage,
@@ -20,11 +20,21 @@ export const Route = createFileRoute("/auth")({
 type Mode = "login" | "existing" | "new";
 
 function registerErrorMessage(res: { reason?: string; message?: string }) {
-  if (res.reason === "duplicate_x_id") return "このX IDは既に登録されています";
+  if (res.reason === "duplicate_x_id") return "このX IDは既に登録されています。ログインしてください";
+  if (res.reason === "existing_not_found") return "既存参加者データにこのX IDが見つかりません";
+  if (res.reason === "participation_mismatch") return "X IDと参加回数が一致しません";
+  if (res.reason === "existing_participant") return "既存参加者です。既存ユーザーログインを使ってください";
   if (res.message) return `登録に失敗しました: ${res.message}`;
   if (res.reason === "auth_failed") return "認証ユーザーの作成に失敗しました";
   if (res.reason === "profile_failed") return "プロフィールの作成に失敗しました";
   return "登録に失敗しました";
+}
+
+function loginErrorMessage(res: { reason?: string }) {
+  if (res.reason === "existing_not_found") return "既存参加者データにこのX IDが見つかりません";
+  if (res.reason === "participation_mismatch") return "X IDと参加回数が一致しません";
+  if (res.reason === "not_found") return "このX IDは未登録です";
+  return "ログインに失敗しました";
 }
 
 function AuthPage() {
@@ -37,9 +47,17 @@ function AuthPage() {
   const exists = useServerFn(xIdExists);
   const login = useServerFn(loginWithXId);
 
-  async function signIn(normalized: string) {
-    const res = await login({ data: { x_id_normalized: normalized } });
-    if (!res.ok) return false;
+  async function signIn(normalized: string, pastParticipation?: number) {
+    const res = await login({
+      data: {
+        x_id_normalized: normalized,
+        ...(pastParticipation !== undefined ? { past_participation: pastParticipation } : {}),
+      },
+    });
+    if (!res.ok) {
+      toast.error(loginErrorMessage(res));
+      return false;
+    }
 
     const { error } = await supabase.auth.setSession({
       access_token: res.access_token,
@@ -64,16 +82,12 @@ function AuthPage() {
       if (mode === "login") {
         const check = await exists({ data: { x_id_normalized: normalized } });
         if (!check.exists) {
-          toast.error("このX IDは未登録です。新規登録してください");
+          toast.error("このX IDは未登録です。既存ユーザーまたは新規登録を使ってください");
           return;
         }
 
         const ok = await signIn(normalized);
-        if (!ok) {
-          toast.error("ログインに失敗しました");
-          return;
-        }
-        navigate({ to: "/dashboard" });
+        if (ok) navigate({ to: "/dashboard" });
         return;
       }
 
@@ -85,6 +99,15 @@ function AuthPage() {
           return;
         }
         pastNum = n;
+      }
+
+      if (mode === "existing") {
+        const check = await exists({ data: { x_id_normalized: normalized } });
+        if (check.exists) {
+          const ok = await signIn(normalized, pastNum);
+          if (ok) navigate({ to: "/dashboard" });
+          return;
+        }
       }
 
       const res = await register({
@@ -101,12 +124,8 @@ function AuthPage() {
         return;
       }
 
-      const ok = await signIn(normalized);
-      if (!ok) {
-        toast.error("登録は完了しましたが、ログインに失敗しました。ログイン画面から再度お試しください");
-        return;
-      }
-      navigate({ to: "/dashboard" });
+      const ok = await signIn(normalized, mode === "existing" ? pastNum : undefined);
+      if (ok) navigate({ to: "/dashboard" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "エラーが発生しました");
     } finally {
@@ -119,15 +138,15 @@ function AuthPage() {
       <div className="w-full max-w-md">
         <header className="text-center mb-8">
           <h1 className="font-display text-4xl text-gold-gradient">810Day毎日くじ</h1>
-          <p className="mt-2 text-sm text-muted-foreground">X IDだけで参加</p>
+          <p className="mt-2 text-sm text-muted-foreground">X IDで参加できます</p>
         </header>
 
         <div className="card-luxe rounded-2xl p-1 mb-6">
           <div className="grid grid-cols-3 rounded-xl overflow-hidden text-sm">
             {[
               ["login", "ログイン"],
-              ["existing", "既存参加"],
-              ["new", "新規参加"],
+              ["existing", "既存ユーザー"],
+              ["new", "新規登録"],
             ].map(([m, label]) => (
               <button
                 key={m}
@@ -146,21 +165,21 @@ function AuthPage() {
 
           {mode === "existing" && (
             <Field
-              label="今までの参加回数"
+              label="これまでの参加回数"
               value={past}
               onChange={(v) => setPast(v.replace(/[^0-9]/g, ""))}
-              placeholder="0"
+              placeholder="例: 34"
               inputMode="numeric"
             />
           )}
 
           <button type="submit" disabled={loading} className="btn-gold w-full rounded-lg py-3 font-display text-base disabled:opacity-60">
-            {loading ? "処理中..." : mode === "login" ? "ログイン" : "登録して開始"}
+            {loading ? "処理中..." : mode === "login" ? "ログイン" : mode === "existing" ? "確認してログイン" : "登録して開始"}
           </button>
         </form>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          パスワードは不要です。X IDのみでログインできます。
+          既存ユーザーは、X IDと参加回数が一致すると過去の参加数・当選回数・ゲージ・還元率が反映されます。
         </p>
       </div>
     </main>

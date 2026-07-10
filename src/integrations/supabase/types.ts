@@ -35,6 +35,39 @@ export type Database = {
         }
         Relationships: []
       }
+      existing_participants: {
+        Row: {
+          confirm_gauge: number
+          created_at: string
+          participation_count: number
+          redemption_rate: number
+          updated_at: string
+          win_count: number
+          x_id_display: string
+          x_id_normalized: string
+        }
+        Insert: {
+          confirm_gauge?: number
+          created_at?: string
+          participation_count?: number
+          redemption_rate?: number
+          updated_at?: string
+          win_count?: number
+          x_id_display: string
+          x_id_normalized: string
+        }
+        Update: {
+          confirm_gauge?: number
+          created_at?: string
+          participation_count?: number
+          redemption_rate?: number
+          updated_at?: string
+          win_count?: number
+          x_id_display?: string
+          x_id_normalized?: string
+        }
+        Relationships: []
+      }
       lottery_draws: {
         Row: {
           created_at: string
