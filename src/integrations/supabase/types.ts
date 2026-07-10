@@ -145,6 +145,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          auth_token: string | null
           confirm_gauge: number
           created_at: string
           discord_id: string | null
@@ -159,6 +160,7 @@ export type Database = {
           x_id_normalized: string
         }
         Insert: {
+          auth_token?: string | null
           confirm_gauge?: number
           created_at?: string
           discord_id?: string | null
@@ -173,6 +175,7 @@ export type Database = {
           x_id_normalized: string
         }
         Update: {
+          auth_token?: string | null
           confirm_gauge?: number
           created_at?: string
           discord_id?: string | null

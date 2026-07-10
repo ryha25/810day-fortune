@@ -119,17 +119,17 @@ export const checkTodayParticipation = createServerFn({ method: "GET" })
     return { participated: !!data, date };
   });
 
-// Sign-up server-side: creates auth user + profile atomically with correct initial stats.
+// Sign-up: creates auth user + profile atomically with a server-generated random
+// auth_token. The token is stored in profiles (service-role only column) and
+// is never sent to the browser, preventing account takeover via X ID guessing.
 export const registerNewUser = createServerFn({ method: "POST" })
-  .inputValidator((d) =>
+  .validator((d: unknown) =>
     z
       .object({
         x_id_display: z.string().min(1).max(20),
         x_id_normalized: z
           .string()
           .regex(/^[a-z0-9_]{1,15}$/),
-        email: z.string().email(),
-        password: z.string().min(8),
         existing: z.boolean(),
         past_participation: z.number().int().min(0).max(100000).optional(),
       })
@@ -137,6 +137,7 @@ export const registerNewUser = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { randomUUID } = await import("node:crypto");
 
     // reject duplicate X ID
     const { data: dup } = await supabaseAdmin
@@ -146,9 +147,13 @@ export const registerNewUser = createServerFn({ method: "POST" })
       .maybeSingle();
     if (dup) return { ok: false as const, reason: "duplicate_x_id" as const };
 
+    // Generate credentials entirely server-side — never derived from public X ID.
+    const authToken = randomUUID();
+    const email = `${data.x_id_normalized}@810day.local`;
+
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-      email: data.email,
-      password: data.password,
+      email,
+      password: authToken,
       email_confirm: true,
     });
     if (createErr || !created.user) {
@@ -156,13 +161,14 @@ export const registerNewUser = createServerFn({ method: "POST" })
     }
     const userId = created.user.id;
     const pc = data.existing ? (data.past_participation ?? 0) : 0;
-    const gauge = Math.min(30, Math.floor(pc * 0.5));
+    const gauge = calcGauge(pc);
     const rate = calcRate(pc);
 
     const { error: profErr } = await supabaseAdmin.from("profiles").insert({
       id: userId,
       x_id_normalized: data.x_id_normalized,
       x_id_display: data.x_id_display,
+      auth_token: authToken,
       participation_count: pc,
       win_count: 0,
       redemption_rate: rate,
@@ -178,9 +184,56 @@ export const registerNewUser = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+// Server-side login: looks up the stored auth_token and signs in on behalf of
+// the user. Returns JWT session tokens so the client can call setSession().
+// The auth_token column is protected from authenticated SELECT — it only flows
+// through this server function, never to the browser.
+export const loginWithXId = createServerFn({ method: "POST" })
+  .validator((d: unknown) =>
+    z.object({ x_id_normalized: z.string().regex(/^[a-z0-9_]{1,15}$/) }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Fetch auth_token via service role (column is hidden from authenticated role)
+    const { data: row, error } = await supabaseAdmin
+      .from("profiles")
+      .select("auth_token")
+      .eq("x_id_normalized", data.x_id_normalized)
+      .maybeSingle();
+
+    if (error || !row || !row.auth_token) {
+      return { ok: false as const, reason: "not_found" as const };
+    }
+
+    const email = `${data.x_id_normalized}@810day.local`;
+    const SUPABASE_URL = process.env.SUPABASE_URL!;
+    const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const authClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+    });
+
+    const { data: session, error: signInErr } = await authClient.auth.signInWithPassword({
+      email,
+      password: row.auth_token,
+    });
+
+    if (signInErr || !session.session) {
+      return { ok: false as const, reason: "auth_failed" as const };
+    }
+
+    return {
+      ok: true as const,
+      access_token: session.session.access_token,
+      refresh_token: session.session.refresh_token,
+    };
+  });
+
 // Lookup existence of X ID (for login form)
 export const xIdExists = createServerFn({ method: "POST" })
-  .inputValidator((d) => z.object({ x_id_normalized: z.string() }).parse(d))
+  .validator((d: unknown) => z.object({ x_id_normalized: z.string() }).parse(d))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row } = await supabaseAdmin
