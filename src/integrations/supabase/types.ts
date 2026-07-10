@@ -35,6 +35,114 @@ export type Database = {
         }
         Relationships: []
       }
+      lottery_draws: {
+        Row: {
+          created_at: string
+          daily_participants_count: number
+          daily_winner_by_gauge: boolean
+          daily_winner_user_id: string | null
+          draw_date: string
+          executed_at: string
+          follow_participants_count: number
+          follow_winner_by_gauge: boolean
+          follow_winner_user_id: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          daily_participants_count?: number
+          daily_winner_by_gauge?: boolean
+          daily_winner_user_id?: string | null
+          draw_date: string
+          executed_at?: string
+          follow_participants_count?: number
+          follow_winner_by_gauge?: boolean
+          follow_winner_user_id?: string | null
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          daily_participants_count?: number
+          daily_winner_by_gauge?: boolean
+          daily_winner_user_id?: string | null
+          draw_date?: string
+          executed_at?: string
+          follow_participants_count?: number
+          follow_winner_by_gauge?: boolean
+          follow_winner_user_id?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
+      lottery_result_views: {
+        Row: {
+          draw_id: string
+          seen_at: string
+          user_id: string
+        }
+        Insert: {
+          draw_id: string
+          seen_at?: string
+          user_id: string
+        }
+        Update: {
+          draw_id?: string
+          seen_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      lottery_winners: {
+        Row: {
+          by_gauge: boolean
+          created_at: string
+          discord_id: string | null
+          draw_date: string
+          draw_id: string
+          id: string
+          kind: string
+          redemption_rate: number
+          reward_inmu: number
+          slot: string
+          sol_address: string | null
+          user_id: string
+          x_id_display: string
+          x_id_normalized: string
+        }
+        Insert: {
+          by_gauge?: boolean
+          created_at?: string
+          discord_id?: string | null
+          draw_date: string
+          draw_id: string
+          id?: string
+          kind: string
+          redemption_rate: number
+          reward_inmu: number
+          slot: string
+          sol_address?: string | null
+          user_id: string
+          x_id_display: string
+          x_id_normalized: string
+        }
+        Update: {
+          by_gauge?: boolean
+          created_at?: string
+          discord_id?: string | null
+          draw_date?: string
+          draw_id?: string
+          id?: string
+          kind?: string
+          redemption_rate?: number
+          reward_inmu?: number
+          slot?: string
+          sol_address?: string | null
+          user_id?: string
+          x_id_display?: string
+          x_id_normalized?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           confirm_gauge: number
@@ -113,6 +221,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      run_daily_draw: {
+        Args: { _draw_date?: string | null }
+        Returns: Json
       }
     }
     Enums: {

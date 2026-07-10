@@ -1,17 +1,18 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
-import { toast } from "sonner";
-import { useProfile } from "@/hooks/useProfile";
-import { BottomNav } from "@/components/BottomNav";
-import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
+import type { FormEvent } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { BottomNav } from "@/components/BottomNav";
+import { useProfile } from "@/hooks/useProfile";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({
     meta: [
       { title: "プロフィール | 810Day毎日くじ" },
-      { name: "description", content: "X ID・SOLアドレス・Discord IDを編集できます。" },
+      { name: "description", content: "X ID、SOLアドレス、Discord IDを編集できます。" },
     ],
   }),
   component: ProfilePage,
@@ -27,14 +28,13 @@ function ProfilePage() {
   const qc = useQueryClient();
 
   useEffect(() => {
-    if (profile) {
-      setXid(profile.x_id_display);
-      setSol(profile.sol_address ?? "");
-      setDc(profile.discord_id ?? "");
-    }
+    if (!profile) return;
+    setXid(profile.x_id_display);
+    setSol(profile.sol_address ?? "");
+    setDc(profile.discord_id ?? "");
   }, [profile]);
 
-  async function handleSave(e: React.FormEvent) {
+  async function handleSave(e: FormEvent) {
     e.preventDefault();
     if (saving || !profile) return;
     setSaving(true);
@@ -78,35 +78,18 @@ function ProfilePage() {
         <h1 className="font-display text-3xl text-gold-gradient text-center mb-6">プロフィール</h1>
         <form onSubmit={handleSave} className="card-luxe rounded-2xl p-6 space-y-4">
           <Field label="X ID" value={xid} onChange={setXid} placeholder="@sample" />
-          <Field
-            label="SOLアドレス（本人と管理者のみ閲覧可能）"
-            value={sol}
-            onChange={setSol}
-            placeholder="任意"
-          />
-          <Field
-            label="Discord ID（本人と管理者のみ閲覧可能）"
-            value={dc}
-            onChange={setDc}
-            placeholder="任意"
-          />
-          <button
-            type="submit"
-            disabled={saving}
-            className="btn-gold w-full rounded-lg py-3 font-semibold disabled:opacity-60"
-          >
+          <Field label="SOLアドレス" value={sol} onChange={setSol} placeholder="任意" />
+          <Field label="Discord ID" value={dc} onChange={setDc} placeholder="任意" />
+          <button type="submit" disabled={saving} className="btn-gold w-full rounded-lg py-3 font-semibold disabled:opacity-60">
             {saving ? "保存中..." : "保存する"}
           </button>
         </form>
 
         <div className="card-luxe rounded-2xl p-4 mt-4 text-sm text-muted-foreground">
-          Discord IDを登録しただけではDiscord参加とは判定されません。
+          Discord加入分は今回の抽選報酬には加算されません。確認後に反映します。
         </div>
 
-        <button
-          onClick={handleLogout}
-          className="mt-6 w-full flex items-center justify-center gap-2 rounded-lg py-3 border border-[oklch(0.5_0.22_25/0.5)] text-[oklch(0.75_0.18_25)]"
-        >
+        <button onClick={handleLogout} className="mt-6 w-full flex items-center justify-center gap-2 rounded-lg py-3 border border-[oklch(0.5_0.22_25/0.5)] text-[oklch(0.75_0.18_25)]">
           <LogOut className="h-4 w-4" /> ログアウト
         </button>
       </div>
