@@ -7,7 +7,6 @@ import { isValidXId, normalizeXId } from "@/lib/xid";
 import { loginWithXId, registerNewUser, xIdExists } from "@/lib/participation.functions";
 
 export const Route = createFileRoute("/auth")({
-  ssr: false,
   head: () => ({
     meta: [
       { title: "ログイン / 新規登録 | 810Day毎日くじ" },
