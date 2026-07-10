@@ -29,6 +29,18 @@ function AuthPage() {
   const exists = useServerFn(xIdExists);
   const login = useServerFn(loginWithXId);
 
+  async function signIn(normalized: string) {
+    const res = await login({ data: { x_id_normalized: normalized } });
+    if (!res.ok) return false;
+
+    const { error } = await supabase.auth.setSession({
+      access_token: res.access_token,
+      refresh_token: res.refresh_token,
+    });
+    if (error) throw error;
+    return true;
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (loading) return;
@@ -47,15 +59,12 @@ function AuthPage() {
           toast.error("このX IDは未登録です。新規登録してください");
           return;
         }
-        const res = await login({ data: { x_id_normalized: normalized } });
-        if (!res.ok) {
+
+        const ok = await signIn(normalized);
+        if (!ok) {
           toast.error("ログインに失敗しました");
           return;
         }
-        await supabase.auth.setSession({
-          access_token: res.access_token,
-          refresh_token: res.refresh_token,
-        });
         navigate({ to: "/dashboard" });
         return;
       }
@@ -78,21 +87,17 @@ function AuthPage() {
           past_participation: pastNum,
         },
       });
+
       if (!res.ok) {
         toast.error(res.reason === "duplicate_x_id" ? "このX IDは既に登録されています" : "登録に失敗しました");
         return;
       }
 
-      // Sign in after registration using the same server-side path
-      const loginRes = await login({ data: { x_id_normalized: normalized } });
-      if (!loginRes.ok) {
-        toast.error("登録は完了しましたが、ログインに失敗しました。ログインページからお試しください");
+      const ok = await signIn(normalized);
+      if (!ok) {
+        toast.error("登録は完了しましたが、ログインに失敗しました。ログイン画面から再度お試しください");
         return;
       }
-      await supabase.auth.setSession({
-        access_token: loginRes.access_token,
-        refresh_token: loginRes.refresh_token,
-      });
       navigate({ to: "/dashboard" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "エラーが発生しました");
@@ -147,7 +152,7 @@ function AuthPage() {
         </form>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          パスワードは不要。X IDのみで安全にログインできます。
+          パスワードは不要です。X IDのみでログインできます。
         </p>
       </div>
     </main>

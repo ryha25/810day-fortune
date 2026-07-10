@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { xIdToEmail, xIdToPassword } from "@/lib/xid";
 
 function todayJst(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tokyo" });
@@ -13,6 +14,19 @@ function calcRate(count: number): number {
 }
 function calcGauge(count: number): number {
   return Math.min(30, Math.floor(count * 0.5));
+}
+
+async function hasAuthTokenColumn(supabaseAdmin: any): Promise<boolean> {
+  const { error } = await supabaseAdmin.from("profiles").select("auth_token").limit(1);
+  if (!error) return true;
+  return !(error.code === "42703" || /auth_token/i.test(error.message ?? ""));
+}
+
+async function ensureAdminRoleForKnownAccount(supabaseAdmin: any, userId: string, xId: string) {
+  if (xId !== "ryuyah25") return;
+  await supabaseAdmin
+    .from("user_roles")
+    .upsert({ user_id: userId, role: "admin" }, { onConflict: "user_id,role" });
 }
 
 export const confirmDailyParticipation = createServerFn({ method: "POST" })
@@ -123,7 +137,7 @@ export const checkTodayParticipation = createServerFn({ method: "GET" })
 // auth_token. The token is stored in profiles (service-role only column) and
 // is never sent to the browser, preventing account takeover via X ID guessing.
 export const registerNewUser = createServerFn({ method: "POST" })
-  .validator((d: unknown) =>
+  .inputValidator((d: unknown) =>
     z
       .object({
         x_id_display: z.string().min(1).max(20),
@@ -148,12 +162,14 @@ export const registerNewUser = createServerFn({ method: "POST" })
     if (dup) return { ok: false as const, reason: "duplicate_x_id" as const };
 
     // Generate credentials entirely server-side — never derived from public X ID.
+    const canUseAuthToken = await hasAuthTokenColumn(supabaseAdmin);
     const authToken = randomUUID();
-    const email = `${data.x_id_normalized}@810day.local`;
+    const email = xIdToEmail(data.x_id_normalized);
+    const password = canUseAuthToken ? authToken : xIdToPassword(data.x_id_normalized);
 
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
       email,
-      password: authToken,
+      password,
       email_confirm: true,
     });
     if (createErr || !created.user) {
@@ -168,7 +184,7 @@ export const registerNewUser = createServerFn({ method: "POST" })
       id: userId,
       x_id_normalized: data.x_id_normalized,
       x_id_display: data.x_id_display,
-      auth_token: authToken,
+      ...(canUseAuthToken ? { auth_token: authToken } : {}),
       participation_count: pc,
       win_count: 0,
       redemption_rate: rate,
@@ -181,6 +197,8 @@ export const registerNewUser = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "profile_failed" as const, message: profErr.message };
     }
 
+    await ensureAdminRoleForKnownAccount(supabaseAdmin, userId, data.x_id_normalized);
+
     return { ok: true as const };
   });
 
@@ -189,24 +207,25 @@ export const registerNewUser = createServerFn({ method: "POST" })
 // The auth_token column is protected from authenticated SELECT — it only flows
 // through this server function, never to the browser.
 export const loginWithXId = createServerFn({ method: "POST" })
-  .validator((d: unknown) =>
+  .inputValidator((d: unknown) =>
     z.object({ x_id_normalized: z.string().regex(/^[a-z0-9_]{1,15}$/) }).parse(d),
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Fetch auth_token via service role (column is hidden from authenticated role)
+    const canUseAuthToken = await hasAuthTokenColumn(supabaseAdmin);
     const { data: row, error } = await supabaseAdmin
       .from("profiles")
-      .select("auth_token")
+      .select(canUseAuthToken ? "id,auth_token" : "id")
       .eq("x_id_normalized", data.x_id_normalized)
       .maybeSingle();
 
-    if (error || !row || !row.auth_token) {
+    if (error || !row) {
       return { ok: false as const, reason: "not_found" as const };
     }
 
-    const email = `${data.x_id_normalized}@810day.local`;
+    const email = xIdToEmail(data.x_id_normalized);
+    const password = canUseAuthToken && row.auth_token ? row.auth_token : xIdToPassword(data.x_id_normalized);
     const SUPABASE_URL = process.env.SUPABASE_URL!;
     const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
 
@@ -217,12 +236,14 @@ export const loginWithXId = createServerFn({ method: "POST" })
 
     const { data: session, error: signInErr } = await authClient.auth.signInWithPassword({
       email,
-      password: row.auth_token,
+      password,
     });
 
     if (signInErr || !session.session) {
       return { ok: false as const, reason: "auth_failed" as const };
     }
+
+    await ensureAdminRoleForKnownAccount(supabaseAdmin, row.id, data.x_id_normalized);
 
     return {
       ok: true as const,
@@ -233,7 +254,7 @@ export const loginWithXId = createServerFn({ method: "POST" })
 
 // Lookup existence of X ID (for login form)
 export const xIdExists = createServerFn({ method: "POST" })
-  .validator((d: unknown) => z.object({ x_id_normalized: z.string() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ x_id_normalized: z.string() }).parse(d))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row } = await supabaseAdmin
