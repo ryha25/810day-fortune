@@ -14,16 +14,109 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      daily_participations: {
+        Row: {
+          created_at: string
+          id: string
+          participation_date: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          participation_date: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          participation_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          confirm_gauge: number
+          created_at: string
+          discord_id: string | null
+          id: string
+          official_follow_registered: boolean
+          participation_count: number
+          redemption_rate: number
+          sol_address: string | null
+          updated_at: string
+          win_count: number
+          x_id_display: string
+          x_id_normalized: string
+        }
+        Insert: {
+          confirm_gauge?: number
+          created_at?: string
+          discord_id?: string | null
+          id: string
+          official_follow_registered?: boolean
+          participation_count?: number
+          redemption_rate?: number
+          sol_address?: string | null
+          updated_at?: string
+          win_count?: number
+          x_id_display: string
+          x_id_normalized: string
+        }
+        Update: {
+          confirm_gauge?: number
+          created_at?: string
+          discord_id?: string | null
+          id?: string
+          official_follow_registered?: boolean
+          participation_count?: number
+          redemption_rate?: number
+          sol_address?: string | null
+          updated_at?: string
+          win_count?: number
+          x_id_display?: string
+          x_id_normalized?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calc_redemption_rate: { Args: { _count: number }; Returns: number }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +243,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const
