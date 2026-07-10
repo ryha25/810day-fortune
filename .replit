@@ -39,6 +39,11 @@ waitForPort = 5000
 [workflows.workflow.metadata]
 outputType = "webview"
 
+[deployment]
+deploymentTarget = "autoscale"
+build = ["sh", "-c", "bun install && bun run build"]
+run = ["sh", "-c", "bun run start"]
+
 [[ports]]
 localPort = 5000
 externalPort = 80

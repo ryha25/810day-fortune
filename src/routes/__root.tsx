@@ -64,12 +64,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "810Day毎日くじ" },
       {
         name: "description",
-        content: "毎日参加して当選を狙う、810Dayに向けた毎日くじWebアプリ。",
+        content: "毎日参加して810Dayに向けた抽選へ参加できるWebアプリ。",
       },
       { property: "og:title", content: "810Day毎日くじ" },
       {
         property: "og:description",
-        content: "毎日参加して当選を狙う、810Dayに向けた毎日くじWebアプリ。",
+        content: "毎日参加して810Dayに向けた抽選へ参加できるWebアプリ。",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
