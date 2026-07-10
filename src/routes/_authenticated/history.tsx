@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import type { ReactNode } from "react";
 import { BottomNav } from "@/components/BottomNav";
 import { getMyWinHistory, listRecentDraws } from "@/lib/draw.functions";
@@ -13,15 +12,13 @@ export const Route = createFileRoute("/_authenticated/history")({
 });
 
 function HistoryPage() {
-  const recentFn = useServerFn(listRecentDraws);
-  const myWinsFn = useServerFn(getMyWinHistory);
   const { data: recent, isLoading } = useQuery({
     queryKey: ["recent-draws"],
-    queryFn: () => recentFn({ data: { limit: 50 } }),
+    queryFn: () => listRecentDraws({ data: { limit: 50 } }),
   });
   const { data: mine } = useQuery({
     queryKey: ["my-win-history"],
-    queryFn: () => myWinsFn(),
+    queryFn: () => getMyWinHistory(),
   });
 
   return (

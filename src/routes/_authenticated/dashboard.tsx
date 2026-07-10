@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { History, Share2, Sparkles, Trophy } from "lucide-react";
@@ -26,11 +25,6 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function Dashboard() {
   const { data: profile, isLoading } = useProfile();
-  const checkFn = useServerFn(checkTodayParticipation);
-  const participateFn = useServerFn(confirmDailyParticipation);
-  const followFn = useServerFn(registerOfficialFollow);
-  const todayDrawFn = useServerFn(getTodayDrawForMe);
-  const markSeenFn = useServerFn(markDrawSeen);
   const qc = useQueryClient();
   const [confirmMode, setConfirmMode] = useState<null | "daily" | "follow">(null);
   const [submitting, setSubmitting] = useState(false);
@@ -38,11 +32,11 @@ function Dashboard() {
 
   const { data: todayStatus } = useQuery({
     queryKey: ["today-participation"],
-    queryFn: () => checkFn(),
+    queryFn: () => checkTodayParticipation(),
   });
   const { data: todayDraw } = useQuery({
     queryKey: ["today-draw-for-me"],
-    queryFn: () => todayDrawFn(),
+    queryFn: () => getTodayDrawForMe(),
     refetchInterval: 60_000,
   });
 
@@ -52,12 +46,12 @@ function Dashboard() {
   useEffect(() => {
     if (!todayDraw?.draw?.id || !shouldCelebrate) return;
     const timer = window.setTimeout(() => {
-      markSeenFn({ data: { draw_id: todayDraw.draw.id } }).then(() => {
+      markDrawSeen({ data: { draw_id: todayDraw.draw.id } }).then(() => {
         qc.invalidateQueries({ queryKey: ["today-draw-for-me"] });
       });
     }, 2500);
     return () => window.clearTimeout(timer);
-  }, [markSeenFn, qc, shouldCelebrate, todayDraw?.draw?.id]);
+  }, [qc, shouldCelebrate, todayDraw?.draw?.id]);
 
   const winnersBySlot = useMemo(() => {
     const winners = todayDraw?.winners ?? [];
@@ -91,7 +85,7 @@ function Dashboard() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      const res = await participateFn();
+      const res = await confirmDailyParticipation();
       toast[res.ok ? "success" : "error"](res.ok ? "参加を確定しました" : "本日は既に参加済みです");
       qc.invalidateQueries({ queryKey: ["today-participation"] });
       qc.invalidateQueries({ queryKey: ["profile", "self"] });
@@ -107,7 +101,7 @@ function Dashboard() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      const res = await followFn();
+      const res = await registerOfficialFollow();
       toast[res.ok ? "success" : "error"](res.ok ? "公式Xフォロー参加を登録しました" : "既に登録済みです");
       qc.invalidateQueries({ queryKey: ["profile", "self"] });
     } catch (e) {

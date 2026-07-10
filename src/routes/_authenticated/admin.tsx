@@ -1,6 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import type { ReactNode } from "react";
 import { BottomNav } from "@/components/BottomNav";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,12 +18,9 @@ export const Route = createFileRoute("/_authenticated/admin")({
 });
 
 function AdminPage() {
-  const eligibleFn = useServerFn(adminTodayEligible);
-  const recentFn = useServerFn(listRecentDraws);
-  const winnersFn = useServerFn(adminListWinners);
-  const { data: eligible } = useQuery({ queryKey: ["admin-eligible"], queryFn: () => eligibleFn() });
-  const { data: recent } = useQuery({ queryKey: ["admin-recent-draws"], queryFn: () => recentFn({ data: { limit: 100 } }) });
-  const { data: winnerData } = useQuery({ queryKey: ["admin-winners"], queryFn: () => winnersFn() });
+  const { data: eligible } = useQuery({ queryKey: ["admin-eligible"], queryFn: () => adminTodayEligible() });
+  const { data: recent } = useQuery({ queryKey: ["admin-recent-draws"], queryFn: () => listRecentDraws({ data: { limit: 100 } }) });
+  const { data: winnerData } = useQuery({ queryKey: ["admin-winners"], queryFn: () => adminListWinners() });
   const winners = winnerData?.winners ?? [];
 
   return (

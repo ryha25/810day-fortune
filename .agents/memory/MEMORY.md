@@ -1,0 +1,2 @@
+- [810DAY auth architecture](810day-auth.md) — login is server-side only; auth_token is stored in profiles, never sent to browser.
+- [Replit port override for Lovable config](lovable-port.md) — @lovable.dev/vite-tanstack-config forces port 8080 in sandbox; use vite.server.port=5000 + strictPort for Replit.
