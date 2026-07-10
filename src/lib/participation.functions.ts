@@ -77,7 +77,6 @@ export const confirmDailyParticipation = createServerFn({ method: "POST" })
       ok: true;
       daily_participated: true;
       daily_inserted: boolean;
-      stat_incremented: boolean;
       participation_count: number;
       confirm_gauge: number;
       redemption_rate: number;
@@ -99,7 +98,6 @@ export const registerOfficialFollow = createServerFn({ method: "POST" })
       ok: true;
       official_follow_registered: true;
       follow_first_registered: boolean;
-      stat_incremented: boolean;
       participation_count: number;
       confirm_gauge: number;
       redemption_rate: number;

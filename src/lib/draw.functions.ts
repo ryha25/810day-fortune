@@ -16,6 +16,17 @@ async function assertAdmin(supabase: any, userId: string) {
   if (!data) throw new Error("管理者権限がありません");
 }
 
+export const verifyAdminPassword = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ password: z.string().min(1) }).parse(d))
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const expected = process.env.ADMIN_PASSWORD;
+    if (!expected) return { ok: false as const, reason: "not_configured" as const };
+    const ok = data.password === expected;
+    return { ok, reason: ok ? null : ("invalid_password" as const) };
+  });
+
 export const listRecentDraws = createServerFn({ method: "GET" })
   .inputValidator((d) => z.object({ limit: z.number().int().min(1).max(100).default(30) }).parse(d ?? {}))
   .handler(async ({ data }) => {
@@ -67,15 +78,13 @@ export const getTodayDrawForMe = createServerFn({ method: "GET" })
     const date = todayJst();
     const { data: draw, error: drawErr } = await supabaseAdmin
       .from("lottery_draws")
-      .select(
-        "id,draw_date,executed_at,daily_winner_user_id,daily_winner_by_gauge,follow_winner_user_id,follow_winner_by_gauge",
-      )
+      .select("id,draw_date,executed_at,daily_winner_user_id,daily_winner_by_gauge,follow_winner_user_id,follow_winner_by_gauge")
       .eq("draw_date", date)
       .eq("is_test", false)
       .is("canceled_at", null)
       .maybeSingle();
     if (drawErr) throw drawErr;
-    if (!draw) return { date, draw: null, winners: [], myWin: null, seen: true };
+    if (!draw) return { date, draw: null, winners: [], myWin: null, seen: true, resultConfirmed: true };
 
     const { data: winners, error: wErr } = await supabaseAdmin
       .from("lottery_winners")
@@ -88,12 +97,19 @@ export const getTodayDrawForMe = createServerFn({ method: "GET" })
     const mine = (winners ?? []).find((w: any) => w.user_id === context.userId) ?? null;
     const { data: seenRow } = await supabaseAdmin
       .from("lottery_result_views")
-      .select("seen_at")
+      .select("seen_at,result_confirmed")
       .eq("draw_id", draw.id)
       .eq("user_id", context.userId)
       .maybeSingle();
 
-    return { date, draw, winners: winners ?? [], myWin: mine, seen: !!seenRow };
+    return {
+      date,
+      draw,
+      winners: winners ?? [],
+      myWin: mine,
+      seen: !!seenRow,
+      resultConfirmed: !!seenRow?.result_confirmed,
+    };
   });
 
 export const markDrawSeen = createServerFn({ method: "POST" })
@@ -101,11 +117,12 @@ export const markDrawSeen = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ draw_id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("lottery_result_views")
-      .upsert({ draw_id: data.draw_id, user_id: context.userId, seen_at: new Date().toISOString() });
+    const { data: result, error } = await (supabaseAdmin as any).rpc("confirm_draw_result", {
+      _user_id: context.userId,
+      _draw_id: data.draw_id,
+    });
     if (error) throw error;
-    return { ok: true as const };
+    return result as Record<string, unknown>;
   });
 
 export const adminTodayEligible = createServerFn({ method: "GET" })
@@ -146,9 +163,7 @@ export const adminListWinners = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await supabaseAdmin
       .from("lottery_winners")
-      .select(
-        "id,draw_id,draw_date,x_id_display,x_id_normalized,kind,slot,by_gauge,redemption_rate,reward_inmu,sol_address,discord_id,is_test,canceled_at,created_at",
-      )
+      .select("id,draw_id,draw_date,x_id_display,x_id_normalized,kind,slot,by_gauge,redemption_rate,reward_inmu,sol_address,discord_id,is_test,canceled_at,created_at")
       .is("canceled_at", null)
       .order("draw_date", { ascending: false })
       .order("created_at", { ascending: false });
@@ -176,9 +191,7 @@ export const adminListParticipants = createServerFn({ method: "POST" })
 
     let query = supabaseAdmin
       .from("profiles")
-      .select(
-        "id,x_id_display,x_id_normalized,participation_count,win_count,redemption_rate,confirm_gauge,official_follow_registered,sol_address,discord_id,created_at",
-      );
+      .select("id,x_id_display,x_id_normalized,participation_count,win_count,redemption_rate,confirm_gauge,official_follow_registered,sol_address,discord_id,created_at");
     if (q) query = query.ilike("x_id_normalized", `%${q}%`);
     if (data.followOnly) query = query.eq("official_follow_registered", true);
     if (data.sort === "participation") query = query.order("participation_count", { ascending: false });

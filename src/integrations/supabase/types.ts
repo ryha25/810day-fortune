@@ -169,17 +169,23 @@ export type Database = {
       }
       lottery_result_views: {
         Row: {
+          confirmed_at: string | null
           draw_id: string
+          result_confirmed: boolean
           seen_at: string
           user_id: string
         }
         Insert: {
+          confirmed_at?: string | null
           draw_id: string
+          result_confirmed?: boolean
           seen_at?: string
           user_id: string
         }
         Update: {
+          confirmed_at?: string | null
           draw_id?: string
+          result_confirmed?: boolean
           seen_at?: string
           user_id?: string
         }
@@ -250,6 +256,7 @@ export type Database = {
           discord_id: string | null
           id: string
           official_follow_registered: boolean
+          official_follow_registered_at: string | null
           participation_count: number
           redemption_rate: number
           sol_address: string | null
@@ -265,6 +272,7 @@ export type Database = {
           discord_id?: string | null
           id: string
           official_follow_registered?: boolean
+          official_follow_registered_at?: string | null
           participation_count?: number
           redemption_rate?: number
           sol_address?: string | null
@@ -280,6 +288,7 @@ export type Database = {
           discord_id?: string | null
           id?: string
           official_follow_registered?: boolean
+          official_follow_registered_at?: string | null
           participation_count?: number
           redemption_rate?: number
           sol_address?: string | null
@@ -336,6 +345,10 @@ export type Database = {
         Returns: Json
       }
       calc_redemption_rate: { Args: { _count: number }; Returns: number }
+      confirm_draw_result: {
+        Args: { _draw_id: string; _user_id: string }
+        Returns: Json
+      }
       cancel_test_draw: { Args: { _draw_id: string }; Returns: Json }
       has_role: {
         Args: {

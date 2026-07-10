@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
-import { History, Share2, Sparkles, Trophy } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CheckCircle2, History, Share2, Sparkles, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { BottomNav } from "@/components/BottomNav";
 import { useProfile } from "@/hooks/useProfile";
@@ -28,6 +28,7 @@ function Dashboard() {
   const qc = useQueryClient();
   const [confirmMode, setConfirmMode] = useState<null | "daily" | "follow">(null);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmingResult, setConfirmingResult] = useState(false);
   const days = daysUntilNext810();
 
   const { data: todayStatus } = useQuery({
@@ -41,17 +42,7 @@ function Dashboard() {
   });
 
   const myWin = todayDraw?.myWin;
-  const shouldCelebrate = !!myWin && !todayDraw?.seen;
-
-  useEffect(() => {
-    if (!todayDraw?.draw?.id || !shouldCelebrate) return;
-    const timer = window.setTimeout(() => {
-      markDrawSeen({ data: { draw_id: todayDraw.draw.id } }).then(() => {
-        qc.invalidateQueries({ queryKey: ["today-draw-for-me"] });
-      });
-    }, 2500);
-    return () => window.clearTimeout(timer);
-  }, [qc, shouldCelebrate, todayDraw?.draw?.id]);
+  const shouldCelebrate = !!myWin && !todayDraw?.resultConfirmed;
 
   const winnersBySlot = useMemo(() => {
     const winners = todayDraw?.winners ?? [];
@@ -65,6 +56,7 @@ function Dashboard() {
   async function refreshParticipationData() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["today-participation"] }),
+      qc.invalidateQueries({ queryKey: ["today-draw-for-me"] }),
       qc.invalidateQueries({ queryKey: ["profile", "self"] }),
       qc.invalidateQueries({ queryKey: ["admin-eligible"] }),
       qc.invalidateQueries({ queryKey: ["admin-participants"] }),
@@ -98,11 +90,7 @@ function Dashboard() {
     setSubmitting(true);
     try {
       const res = await confirmDailyParticipation();
-      if (res.ok) {
-        toast.success("参加を確定しました");
-      } else {
-        toast.error("本日は既に参加済みです");
-      }
+      toast.success(res.daily_inserted ? "参加を確定しました" : "本日は既に参加済みです");
       await refreshParticipationData();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "エラー");
@@ -117,17 +105,28 @@ function Dashboard() {
     setSubmitting(true);
     try {
       const res = await registerOfficialFollow();
-      if (res.ok) {
-        toast.success("公式Xフォロー参加を登録しました");
-      } else {
-        toast.error("既に登録済みです");
-      }
+      toast.success(res.follow_first_registered ? "公式Xフォロー枠へ登録しました" : "既に登録済みです");
       await refreshParticipationData();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "エラー");
     } finally {
       setSubmitting(false);
       setConfirmMode(null);
+    }
+  }
+
+  async function confirmResult() {
+    if (!todayDraw?.draw?.id || confirmingResult) return;
+    setConfirmingResult(true);
+    try {
+      const res = await markDrawSeen({ data: { draw_id: todayDraw.draw.id } });
+      if (res.ok) toast.success(res.already_confirmed ? "確認済みです" : "抽選結果を確認しました");
+      else toast.error("抽選結果の確認に失敗しました");
+      await refreshParticipationData();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "エラー");
+    } finally {
+      setConfirmingResult(false);
     }
   }
 
@@ -160,7 +159,7 @@ function Dashboard() {
             {todayStatus?.participated ? "本日の投稿参加済み" : "毎日参加する"}
           </button>
           <button onClick={openOfficialX} disabled={profile.official_follow_registered} className="btn-crimson w-full rounded-xl py-4 font-display text-lg disabled:opacity-50">
-            {profile.official_follow_registered ? "公式Xフォロー参加登録済み" : "公式Xをフォローして参加"}
+            {profile.official_follow_registered ? "公式Xフォロー枠 登録済み" : "公式Xをフォローして抽選枠を追加"}
           </button>
         </section>
 
@@ -203,6 +202,14 @@ function Dashboard() {
                 <p className="text-sm text-muted-foreground">今回は未当選です。</p>
               )}
               <p className="text-xs text-muted-foreground">{DISCORD_NOTE}</p>
+              <button
+                onClick={confirmResult}
+                disabled={confirmingResult || todayDraw.resultConfirmed}
+                className="btn-gold w-full rounded-lg py-3 font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {todayDraw.resultConfirmed ? "確認済み" : confirmingResult ? "確認中..." : "OK"}
+              </button>
             </>
           )}
         </section>
@@ -274,7 +281,7 @@ function ConfirmDialog({
         <p className="text-sm text-muted-foreground text-center mt-2">確認後、参加を確定してください。</p>
         <div className="mt-6 space-y-2">
           <button onClick={onConfirm} disabled={submitting} className="btn-gold w-full rounded-lg py-3 font-semibold disabled:opacity-60">
-            {submitting ? "送信中..." : "参加を確定する"}
+            {submitting ? "送信中..." : "確定する"}
           </button>
           <button onClick={onCancel} disabled={submitting} className="w-full rounded-lg py-2.5 text-sm text-muted-foreground">
             キャンセル

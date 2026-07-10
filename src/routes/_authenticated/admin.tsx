@@ -14,6 +14,7 @@ import {
   adminTodayEligible,
   adminUpdateParticipantStats,
   listRecentDraws,
+  verifyAdminPassword,
 } from "@/lib/draw.functions";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -42,22 +43,42 @@ function AdminPage() {
   const [todayOnly, setTodayOnly] = useState(false);
   const [followOnly, setFollowOnly] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminVerified, setAdminVerified] = useState(false);
+  const verifyPassword = useMutation({
+    mutationFn: (password: string) => verifyAdminPassword({ data: { password } }),
+    onSuccess: (res) => {
+      if (res.ok) {
+        setAdminVerified(true);
+        toast.success("管理画面を開きました");
+      } else if (res.reason === "not_configured") {
+        toast.error("ADMIN_PASSWORD が設定されていません");
+      } else {
+        toast.error("管理者パスワードが正しくありません");
+      }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "認証に失敗しました"),
+  });
 
   const { data: eligible, refetch: refetchEligible } = useQuery({
     queryKey: ["admin-eligible"],
     queryFn: () => adminTodayEligible(),
+    enabled: adminVerified,
   });
   const { data: recent } = useQuery({
     queryKey: ["admin-recent-draws"],
     queryFn: () => listRecentDraws({ data: { limit: 100 } }),
+    enabled: adminVerified,
   });
   const { data: winnerData } = useQuery({
     queryKey: ["admin-winners"],
     queryFn: () => adminListWinners(),
+    enabled: adminVerified,
   });
   const { data: participantData, refetch: refetchParticipants } = useQuery({
     queryKey: ["admin-participants", q, sort, todayOnly, followOnly],
     queryFn: () => adminListParticipants({ data: { q, sort, todayOnly, followOnly } }),
+    enabled: adminVerified,
   });
 
   const runTest = useMutation({
@@ -85,6 +106,33 @@ function AdminPage() {
   const productionWinners = winners.filter((winner: any) => !winner.is_test);
 
   const testDrawIds = useMemo(() => [...new Set(testWinners.map((winner: any) => winner.draw_id))], [testWinners]);
+
+  if (!adminVerified) {
+    return (
+      <main className="min-h-screen bg-luxe pb-28">
+        <div className="mx-auto max-w-md px-4 pt-16">
+          <section className="card-luxe rounded-2xl p-6 space-y-4">
+            <h1 className="font-display text-3xl text-gold-gradient text-center">管理者認証</h1>
+            <input
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+              type="password"
+              placeholder="管理者パスワード"
+              className="w-full rounded-lg bg-[oklch(0.09_0.01_40)] border border-[oklch(0.55_0.12_82/0.35)] px-3 py-2.5 outline-none"
+            />
+            <button
+              onClick={() => verifyPassword.mutate(adminPassword)}
+              disabled={verifyPassword.isPending}
+              className="btn-gold w-full rounded-lg py-3 font-semibold disabled:opacity-60"
+            >
+              {verifyPassword.isPending ? "確認中..." : "管理画面へ入る"}
+            </button>
+          </section>
+        </div>
+        <BottomNav />
+      </main>
+    );
+  }
 
   function handleRunTestDraw() {
     if (!window.confirm("現在の抽選対象者でテスト抽選を実行します。ユーザーデータへテスト結果が反映されます。よろしいですか？")) return;
