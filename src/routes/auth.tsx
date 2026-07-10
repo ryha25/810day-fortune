@@ -4,8 +4,8 @@ import type { FormEvent, HTMLAttributes } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { isValidXId, normalizeXId, xIdToEmail, xIdToPassword } from "@/lib/xid";
-import { registerNewUser, xIdExists } from "@/lib/participation.functions";
+import { isValidXId, normalizeXId } from "@/lib/xid";
+import { loginWithXId, registerNewUser, xIdExists } from "@/lib/participation.functions";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -27,6 +27,7 @@ function AuthPage() {
   const navigate = useNavigate();
   const register = useServerFn(registerNewUser);
   const exists = useServerFn(xIdExists);
+  const login = useServerFn(loginWithXId);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -40,17 +41,21 @@ function AuthPage() {
 
     setLoading(true);
     try {
-      const email = xIdToEmail(normalized);
-      const password = xIdToPassword(normalized);
-
       if (mode === "login") {
         const check = await exists({ data: { x_id_normalized: normalized } });
         if (!check.exists) {
           toast.error("このX IDは未登録です。新規登録してください");
           return;
         }
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        const res = await login({ data: { x_id_normalized: normalized } });
+        if (!res.ok) {
+          toast.error("ログインに失敗しました");
+          return;
+        }
+        await supabase.auth.setSession({
+          access_token: res.access_token,
+          refresh_token: res.refresh_token,
+        });
         navigate({ to: "/dashboard" });
         return;
       }
@@ -69,8 +74,6 @@ function AuthPage() {
         data: {
           x_id_display: xid.trim(),
           x_id_normalized: normalized,
-          email,
-          password,
           existing: mode === "existing",
           past_participation: pastNum,
         },
@@ -80,8 +83,16 @@ function AuthPage() {
         return;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      // Sign in after registration using the same server-side path
+      const loginRes = await login({ data: { x_id_normalized: normalized } });
+      if (!loginRes.ok) {
+        toast.error("登録は完了しましたが、ログインに失敗しました。ログインページからお試しください");
+        return;
+      }
+      await supabase.auth.setSession({
+        access_token: loginRes.access_token,
+        refresh_token: loginRes.refresh_token,
+      });
       navigate({ to: "/dashboard" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "エラーが発生しました");
@@ -134,6 +145,10 @@ function AuthPage() {
             {loading ? "処理中..." : mode === "login" ? "ログイン" : "登録して開始"}
           </button>
         </form>
+
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          パスワードは不要。X IDのみで安全にログインできます。
+        </p>
       </div>
     </main>
   );
