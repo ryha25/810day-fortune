@@ -1,18 +1,17 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  Outlet,
+  HeadContent,
   Link,
+  Outlet,
+  Scripts,
   createRootRouteWithContext,
   useRouter,
-  HeadContent,
-  Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-
+import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { supabase } from "@/integrations/supabase/client";
-import { Toaster } from "sonner";
 
 function NotFoundComponent() {
   return (
@@ -33,9 +32,11 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-luxe px-4">
       <div className="max-w-md text-center card-luxe rounded-2xl p-8">
@@ -61,9 +62,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "810Day毎日くじ" },
-      { name: "description", content: "毎日参加して当選を狙おう。8月10日までのカウントダウン付きの毎日くじ。" },
+      {
+        name: "description",
+        content: "毎日参加して当選を狙う、810Dayに向けた毎日くじWebアプリ。",
+      },
       { property: "og:title", content: "810Day毎日くじ" },
-      { property: "og:description", content: "毎日参加して当選を狙おう。810Dayに向けたゲーム風毎日くじWebアプリ。" },
+      {
+        property: "og:description",
+        content: "毎日参加して当選を狙う、810Dayに向けた毎日くじWebアプリ。",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -101,6 +108,7 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
