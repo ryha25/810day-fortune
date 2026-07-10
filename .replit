@@ -7,14 +7,6 @@ channel = "stable-25_05"
 
 [userenv]
 
-[userenv.shared]
-SUPABASE_PROJECT_ID = "mhtvtviwbgtiohtrituv"
-SUPABASE_PUBLISHABLE_KEY = "sb_publishable_-HwZuibtbnQ_w-g7LaNpbg_a2BAFECu"
-SUPABASE_URL = "https://mhtvtviwbgtiohtrituv.supabase.co"
-VITE_SUPABASE_PROJECT_ID = "mhtvtviwbgtiohtrituv"
-VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_-HwZuibtbnQ_w-g7LaNpbg_a2BAFECu"
-VITE_SUPABASE_URL = "https://mhtvtviwbgtiohtrituv.supabase.co"
-
 [workflows]
 runButton = "Project"
 
