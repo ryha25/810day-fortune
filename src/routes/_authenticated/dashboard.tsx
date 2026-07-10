@@ -10,7 +10,7 @@ import { daysUntilNext810 } from "@/lib/date-jst";
 import { checkTodayParticipation, confirmDailyParticipation, registerOfficialFollow } from "@/lib/participation.functions";
 import { getTodayDrawForMe, markDrawSeen } from "@/lib/draw.functions";
 
-const OFFICIAL_X = "810Day_official";
+const OFFICIAL_X_URL = "https://x.com/inmucoin?s=21&t=qie9_vjU0QmQ2J90th9B-Q";
 const DISCORD_NOTE = "※Discord加入分は確認後反映します。";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -62,6 +62,14 @@ function Dashboard() {
     };
   }, [todayDraw?.winners]);
 
+  async function refreshParticipationData() {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["today-participation"] }),
+      qc.invalidateQueries({ queryKey: ["profile", "self"] }),
+      qc.invalidateQueries({ queryKey: ["admin-eligible"] }),
+    ]);
+  }
+
   if (isLoading || !profile) {
     return (
       <main className="min-h-screen bg-luxe flex items-center justify-center">
@@ -71,13 +79,16 @@ function Dashboard() {
   }
 
   function openDailyPost() {
-    const text = encodeURIComponent(`810Dayまであと${days}日\n810Day毎日くじに参加します\n#810Day毎日宝くじ`);
+    const appUrl = window.location.origin;
+    const text = encodeURIComponent(
+      `810Dayまであと${days}日\n810Day毎日くじに参加しました\n参加はこちらから\n${appUrl}\n#810Day毎日宝くじ`,
+    );
     window.open(`https://x.com/intent/post?text=${text}`, "_blank", "noopener,noreferrer");
     setConfirmMode("daily");
   }
 
   function openOfficialX() {
-    window.open(`https://x.com/${OFFICIAL_X}`, "_blank", "noopener,noreferrer");
+    window.open(OFFICIAL_X_URL, "_blank", "noopener,noreferrer");
     setConfirmMode("follow");
   }
 
@@ -86,9 +97,12 @@ function Dashboard() {
     setSubmitting(true);
     try {
       const res = await confirmDailyParticipation();
-      toast[res.ok ? "success" : "error"](res.ok ? "参加を確定しました" : "本日は既に参加済みです");
-      qc.invalidateQueries({ queryKey: ["today-participation"] });
-      qc.invalidateQueries({ queryKey: ["profile", "self"] });
+      if (res.ok) {
+        toast.success("参加を確定しました");
+      } else {
+        toast.error("本日は既に参加済みです");
+      }
+      await refreshParticipationData();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "エラー");
     } finally {
@@ -102,8 +116,12 @@ function Dashboard() {
     setSubmitting(true);
     try {
       const res = await registerOfficialFollow();
-      toast[res.ok ? "success" : "error"](res.ok ? "公式Xフォロー参加を登録しました" : "既に登録済みです");
-      qc.invalidateQueries({ queryKey: ["profile", "self"] });
+      if (res.ok) {
+        toast.success("公式Xフォロー参加を登録しました");
+      } else {
+        toast.error("既に登録済みです");
+      }
+      await refreshParticipationData();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "エラー");
     } finally {

@@ -11,22 +11,41 @@ export const Route = createFileRoute("/_authenticated/admin")({
   beforeLoad: async () => {
     const { data } = await supabase.auth.getUser();
     if (!data.user) throw redirect({ to: "/auth" });
-    const { data: role } = await supabase.from("user_roles").select("role").eq("user_id", data.user.id).eq("role", "admin").maybeSingle();
+    const { data: role } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", data.user.id)
+      .eq("role", "admin")
+      .maybeSingle();
     if (!role) throw redirect({ to: "/dashboard" });
   },
   component: AdminPage,
 });
 
 function AdminPage() {
-  const { data: eligible } = useQuery({ queryKey: ["admin-eligible"], queryFn: () => adminTodayEligible() });
-  const { data: recent } = useQuery({ queryKey: ["admin-recent-draws"], queryFn: () => listRecentDraws({ data: { limit: 100 } }) });
-  const { data: winnerData } = useQuery({ queryKey: ["admin-winners"], queryFn: () => adminListWinners() });
+  const { data: eligible, refetch: refetchEligible } = useQuery({
+    queryKey: ["admin-eligible"],
+    queryFn: () => adminTodayEligible(),
+  });
+  const { data: recent } = useQuery({
+    queryKey: ["admin-recent-draws"],
+    queryFn: () => listRecentDraws({ data: { limit: 100 } }),
+  });
+  const { data: winnerData } = useQuery({
+    queryKey: ["admin-winners"],
+    queryFn: () => adminListWinners(),
+  });
   const winners = winnerData?.winners ?? [];
 
   return (
     <main className="min-h-screen bg-luxe pb-28">
       <div className="mx-auto max-w-md px-4 pt-8 space-y-5">
-        <h1 className="font-display text-3xl text-gold-gradient text-center">管理</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="font-display text-3xl text-gold-gradient">管理</h1>
+          <button onClick={() => refetchEligible()} className="text-xs text-[oklch(0.82_0.15_88)]">
+            更新
+          </button>
+        </div>
 
         <section className="card-luxe rounded-2xl p-5">
           <h2 className="font-display text-xl text-gold-gradient mb-3">当日の抽選対象者</h2>
@@ -80,7 +99,9 @@ function EligibleList({ title, rows }: { title: string; rows: any[] }) {
         {rows.map((row) => (
           <div key={row.user_id ?? row.id} className="rounded-lg border border-[oklch(0.55_0.12_82/0.25)] px-3 py-2 text-xs">
             <div>@{row.x_id_normalized}</div>
-            <div className="text-muted-foreground">ゲージ {row.confirm_gauge}/30 / 還元率 {row.redemption_rate}%</div>
+            <div className="text-muted-foreground">
+              ゲージ {row.confirm_gauge}/30 / 還元率 {row.redemption_rate}%
+            </div>
           </div>
         ))}
         {rows.length === 0 && <p className="text-xs text-muted-foreground">対象者はいません。</p>}
