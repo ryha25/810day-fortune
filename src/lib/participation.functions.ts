@@ -30,6 +30,10 @@ async function ensureAdminRoleForKnownAccount(supabaseAdmin: any, userId: string
     .upsert({ user_id: userId, role: "admin" }, { onConflict: "user_id,role" });
 }
 
+function isKnownAdminXId(xId: string): boolean {
+  return xId === "ryuyah25";
+}
+
 type ExistingParticipantSeed = {
   x_id_display: string;
   participation_count: number;
@@ -236,7 +240,28 @@ export const loginWithXId = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "not_found" as const };
     }
 
-    const password = data.password || (canUseAuthToken && row.auth_token ? row.auth_token : xIdToPassword(data.x_id_normalized));
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    const isAdminPasswordLogin =
+      !!data.password &&
+      isKnownAdminXId(data.x_id_normalized) &&
+      !!adminPassword &&
+      data.password === adminPassword;
+
+    if (data.password && isKnownAdminXId(data.x_id_normalized) && !adminPassword) {
+      return { ok: false as const, reason: "admin_password_not_configured" as const };
+    }
+
+    let password = data.password || (canUseAuthToken && row.auth_token ? row.auth_token : xIdToPassword(data.x_id_normalized));
+    if (isAdminPasswordLogin) {
+      const { error: updatePasswordErr } = await supabaseAdmin.auth.admin.updateUserById(row.id, {
+        password: adminPassword,
+      });
+      if (updatePasswordErr) return { ok: false as const, reason: "auth_failed" as const };
+      if (canUseAuthToken) {
+        await supabaseAdmin.from("profiles").update({ auth_token: null }).eq("id", row.id);
+      }
+      password = adminPassword;
+    }
     if (!password) return { ok: false as const, reason: "password_required" as const };
 
     const SUPABASE_URL = process.env.SUPABASE_URL!;

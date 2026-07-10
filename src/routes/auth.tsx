@@ -19,6 +19,10 @@ export const Route = createFileRoute("/auth")({
 
 type Mode = "login" | "existing" | "new";
 
+function isAdminXId(normalized: string) {
+  return normalized === "ryuyah25";
+}
+
 function registerErrorMessage(res: { reason?: string; message?: string }) {
   if (res.reason === "duplicate_x_id") return "このX IDは既に登録されています。ログインしてください";
   if (res.reason === "existing_not_found") return "既存参加者データにこのX IDが見つかりません";
@@ -35,6 +39,7 @@ function loginErrorMessage(res: { reason?: string }) {
   if (res.reason === "participation_mismatch") return "X IDと参加回数が一致しません";
   if (res.reason === "not_found") return "このX IDは未登録です";
   if (res.reason === "password_required") return "パスワードを入力してください";
+  if (res.reason === "admin_password_not_configured") return "ADMIN_PASSWORD が設定されていません";
   return "ログインに失敗しました";
 }
 
@@ -70,6 +75,10 @@ function AuthPage() {
     return true;
   }
 
+  function goAfterLogin(normalized: string) {
+    navigate({ to: isAdminXId(normalized) ? "/admin" : "/dashboard" });
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (loading) return;
@@ -90,7 +99,7 @@ function AuthPage() {
         }
 
         const ok = await signIn(normalized);
-        if (ok) navigate({ to: "/dashboard" });
+        if (ok) goAfterLogin(normalized);
         return;
       }
 
@@ -108,7 +117,7 @@ function AuthPage() {
         const check = await exists({ data: { x_id_normalized: normalized } });
         if (check.exists) {
           const ok = await signIn(normalized, pastNum);
-          if (ok) navigate({ to: "/dashboard" });
+          if (ok) goAfterLogin(normalized);
           return;
         }
       }
@@ -128,7 +137,7 @@ function AuthPage() {
       }
 
       const ok = await signIn(normalized, mode === "existing" ? pastNum : undefined);
-      if (ok) navigate({ to: "/dashboard" });
+      if (ok) goAfterLogin(normalized);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "エラーが発生しました");
     } finally {
@@ -171,7 +180,7 @@ function AuthPage() {
               label="パスワード"
               value={password}
               onChange={setPassword}
-              placeholder="変更後のパスワードがある場合のみ"
+              placeholder="管理者または変更済みユーザーのみ"
               type="password"
             />
           )}
@@ -192,7 +201,7 @@ function AuthPage() {
         </form>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          既存ユーザーは、X IDと参加回数が一致すると過去の参加数・当選回数・ゲージ・還元率が反映されます。
+          管理アカウントはX IDと管理者パスワードでログインできます。
         </p>
       </div>
     </main>
