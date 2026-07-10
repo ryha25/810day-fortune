@@ -18,10 +18,10 @@ function NotFoundComponent() {
     <div className="flex min-h-screen items-center justify-center bg-luxe px-4">
       <div className="max-w-md text-center card-luxe rounded-2xl p-8">
         <h1 className="text-7xl font-display text-gold-gradient">404</h1>
-        <h2 className="mt-4 text-xl font-semibold">ページが見つかりません</h2>
+        <h2 className="mt-4 text-xl font-semibold">Page not found</h2>
         <div className="mt-6">
           <Link to="/" className="btn-gold rounded-md px-4 py-2 text-sm font-semibold">
-            ホームへ
+            Home
           </Link>
         </div>
       </div>
@@ -40,8 +40,8 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-luxe px-4">
       <div className="max-w-md text-center card-luxe rounded-2xl p-8">
-        <h1 className="text-xl font-display text-gold-gradient">エラーが発生しました</h1>
-        <p className="mt-2 text-sm text-muted-foreground">再度お試しください。</p>
+        <h1 className="text-xl font-display text-gold-gradient">An error occurred</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Please try again.</p>
         <button
           onClick={() => {
             router.invalidate();
@@ -49,7 +49,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           }}
           className="btn-gold mt-6 rounded-md px-4 py-2 text-sm font-semibold"
         >
-          もう一度
+          Try again
         </button>
       </div>
     </div>
@@ -61,15 +61,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { title: "810Day毎日くじ" },
+      { title: "810Day Daily Lottery" },
       {
         name: "description",
-        content: "毎日参加して810Dayに向けた抽選へ参加できるWebアプリ。",
+        content: "A daily lottery app for 810Day.",
       },
-      { property: "og:title", content: "810Day毎日くじ" },
+      { property: "og:title", content: "810Day Daily Lottery" },
       {
         property: "og:description",
-        content: "毎日参加して810Dayに向けた抽選へ参加できるWebアプリ。",
+        content: "A daily lottery app for 810Day.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

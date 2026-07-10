@@ -3,6 +3,21 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { xIdToEmail, xIdToPassword } from "@/lib/xid";
 
+function logSupabaseError(scope: string, error: any) {
+  if (!error) return;
+  console.error(`[${scope}] Supabase error`, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+    status: error.status,
+  });
+}
+
+function logUnexpectedError(scope: string, error: unknown) {
+  console.error(`[${scope}] Unexpected error`, error);
+}
+
 function todayJst(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tokyo" });
 }
@@ -136,76 +151,91 @@ export const registerNewUser = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { randomUUID } = await import("node:crypto");
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { randomUUID } = await import("node:crypto");
 
-    const { data: dup } = await supabaseAdmin
-      .from("profiles")
-      .select("id")
-      .eq("x_id_normalized", data.x_id_normalized)
-      .maybeSingle();
-    if (dup) return { ok: false as const, reason: "duplicate_x_id" as const };
-
-    const seed = await getExistingParticipantSeed(supabaseAdmin, data.x_id_normalized);
-    if (data.existing) {
-      if (!seed) return { ok: false as const, reason: "existing_not_found" as const };
-      if (data.past_participation !== seed.participation_count) {
-        return { ok: false as const, reason: "participation_mismatch" as const };
+      const { data: dup, error: dupErr } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("x_id_normalized", data.x_id_normalized)
+        .maybeSingle();
+      if (dupErr) {
+        logSupabaseError("registerNewUser.duplicateCheck", dupErr);
+        return { ok: false as const, reason: "profile_failed" as const };
       }
-    } else if (seed) {
-      return { ok: false as const, reason: "existing_participant" as const };
-    }
+      if (dup) return { ok: false as const, reason: "duplicate_x_id" as const };
 
-    const canUseAuthToken = await hasAuthTokenColumn(supabaseAdmin);
-    const authToken = randomUUID();
-    const email = xIdToEmail(data.x_id_normalized);
-    const password = canUseAuthToken ? authToken : xIdToPassword(data.x_id_normalized);
-
-    let { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
-    if (createErr && /already|registered|exists/i.test(createErr.message ?? "")) {
-      const cleaned = await deleteOrphanAuthUserByEmail(supabaseAdmin, email);
-      if (cleaned) {
-        const retry = await supabaseAdmin.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-        });
-        created = retry.data;
-        createErr = retry.error;
+      const seed = await getExistingParticipantSeed(supabaseAdmin, data.x_id_normalized);
+      if (data.existing) {
+        if (!seed) return { ok: false as const, reason: "existing_not_found" as const };
+        if (data.past_participation !== seed.participation_count) {
+          return { ok: false as const, reason: "participation_mismatch" as const };
+        }
+      } else if (seed) {
+        return { ok: false as const, reason: "existing_participant" as const };
       }
+
+      const canUseAuthToken = await hasAuthTokenColumn(supabaseAdmin);
+      const authToken = randomUUID();
+      const email = xIdToEmail(data.x_id_normalized);
+      const password = canUseAuthToken ? authToken : xIdToPassword(data.x_id_normalized);
+
+      let { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
+      if (createErr && /already|registered|exists/i.test(createErr.message ?? "")) {
+        const cleaned = await deleteOrphanAuthUserByEmail(supabaseAdmin, email);
+        if (cleaned) {
+          const retry = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+          });
+          created = retry.data;
+          createErr = retry.error;
+        }
+      }
+      if (createErr || !created.user) {
+        logSupabaseError("registerNewUser.createAuthUser", createErr);
+        return { ok: false as const, reason: "auth_failed" as const };
+      }
+
+      const userId = created.user.id;
+      const pc = seed?.participation_count ?? 0;
+      const gauge = seed?.confirm_gauge ?? calcGauge(pc);
+      const rate = seed?.redemption_rate ?? calcRate(pc);
+      const displayXId = seed?.x_id_display ?? `@${data.x_id_normalized}`;
+
+      const { error: profErr } = await supabaseAdmin.from("profiles").insert({
+        id: userId,
+        x_id_normalized: data.x_id_normalized,
+        x_id_display: displayXId,
+        ...(canUseAuthToken ? { auth_token: authToken } : {}),
+        participation_count: pc,
+        win_count: seed?.win_count ?? 0,
+        redemption_rate: rate,
+        confirm_gauge: gauge,
+        official_follow_registered: false,
+      });
+      if (profErr) {
+        logSupabaseError("registerNewUser.insertProfile", profErr);
+        await supabaseAdmin.auth.admin.deleteUser(userId);
+        if (profErr.code === "23505" || /duplicate|unique/i.test(profErr.message ?? "")) {
+          return { ok: false as const, reason: "duplicate_x_id" as const };
+        }
+        return { ok: false as const, reason: "profile_failed" as const };
+      }
+
+      await ensureAdminRoleForKnownAccount(supabaseAdmin, userId, data.x_id_normalized);
+
+      return { ok: true as const };
+    } catch (error) {
+      logUnexpectedError("registerNewUser", error);
+      return { ok: false as const, reason: "profile_failed" as const };
     }
-    if (createErr || !created.user) {
-      return { ok: false as const, reason: "auth_failed" as const, message: createErr?.message };
-    }
-
-    const userId = created.user.id;
-    const pc = seed?.participation_count ?? 0;
-    const gauge = seed?.confirm_gauge ?? calcGauge(pc);
-    const rate = seed?.redemption_rate ?? calcRate(pc);
-
-    const { error: profErr } = await supabaseAdmin.from("profiles").insert({
-      id: userId,
-      x_id_normalized: data.x_id_normalized,
-      x_id_display: seed?.x_id_display ?? data.x_id_display,
-      ...(canUseAuthToken ? { auth_token: authToken } : {}),
-      participation_count: pc,
-      win_count: seed?.win_count ?? 0,
-      redemption_rate: rate,
-      confirm_gauge: gauge,
-      official_follow_registered: false,
-    });
-    if (profErr) {
-      await supabaseAdmin.auth.admin.deleteUser(userId);
-      return { ok: false as const, reason: "profile_failed" as const, message: profErr.message };
-    }
-
-    await ensureAdminRoleForKnownAccount(supabaseAdmin, userId, data.x_id_normalized);
-
-    return { ok: true as const };
   });
 
 export const loginWithXId = createServerFn({ method: "POST" })
@@ -219,7 +249,13 @@ export const loginWithXId = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    let supabaseAdmin: any;
+    try {
+      ({ supabaseAdmin } = await import("@/integrations/supabase/client.server"));
+    } catch (error) {
+      logUnexpectedError("loginWithXId.importSupabase", error);
+      return { ok: false as const, reason: "network_error" as const };
+    }
 
     if (data.past_participation !== undefined) {
       const seed = await getExistingParticipantSeed(supabaseAdmin, data.x_id_normalized);
@@ -236,7 +272,11 @@ export const loginWithXId = createServerFn({ method: "POST" })
       .eq("x_id_normalized", data.x_id_normalized)
       .maybeSingle();
 
-    if (error || !row) {
+    if (error) {
+      logSupabaseError("loginWithXId.findProfile", error);
+      return { ok: false as const, reason: "not_found" as const };
+    }
+    if (!row) {
       return { ok: false as const, reason: "not_found" as const };
     }
 
@@ -256,7 +296,10 @@ export const loginWithXId = createServerFn({ method: "POST" })
       const { error: updatePasswordErr } = await supabaseAdmin.auth.admin.updateUserById(row.id, {
         password: adminPassword,
       });
-      if (updatePasswordErr) return { ok: false as const, reason: "auth_failed" as const };
+      if (updatePasswordErr) {
+        logSupabaseError("loginWithXId.updateAdminPassword", updatePasswordErr);
+        return { ok: false as const, reason: "auth_failed" as const };
+      }
       if (canUseAuthToken) {
         await supabaseAdmin.from("profiles").update({ auth_token: null }).eq("id", row.id);
       }
@@ -279,6 +322,7 @@ export const loginWithXId = createServerFn({ method: "POST" })
     });
 
     if (signInErr || !session.session) {
+      logSupabaseError("loginWithXId.signInWithPassword", signInErr);
       return { ok: false as const, reason: "auth_failed" as const };
     }
 

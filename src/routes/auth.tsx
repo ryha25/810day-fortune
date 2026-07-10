@@ -23,24 +23,28 @@ function isAdminXId(normalized: string) {
   return normalized === "ryuyah25";
 }
 
-function registerErrorMessage(res: { reason?: string; message?: string }) {
-  if (res.reason === "duplicate_x_id") return "このX IDは既に登録されています。ログインしてください";
-  if (res.reason === "existing_not_found") return "既存参加者データにこのX IDが見つかりません";
-  if (res.reason === "participation_mismatch") return "X IDと参加回数が一致しません";
-  if (res.reason === "existing_participant") return "既存参加者です。既存ユーザーログインを使ってください";
-  if (res.message) return `登録に失敗しました: ${res.message}`;
-  if (res.reason === "auth_failed") return "認証ユーザーの作成に失敗しました";
-  if (res.reason === "profile_failed") return "プロフィールの作成に失敗しました";
-  return "登録に失敗しました";
+function isNetworkError(err: unknown) {
+  if (!(err instanceof Error)) return false;
+  return /fetch|network|failed to fetch|load failed|通信/i.test(err.message);
+}
+
+function registerErrorMessage(res: { reason?: string }) {
+  if (res.reason === "duplicate_x_id") return "このX IDはすでに登録されています。";
+  if (res.reason === "existing_not_found") return "既存参加者データにこのX IDが見つかりません。";
+  if (res.reason === "participation_mismatch") return "X IDと参加回数が一致しません。";
+  if (res.reason === "existing_participant") return "既存参加者です。既存ユーザーログインを使ってください。";
+  if (res.reason === "network_error") return "通信に失敗しました。時間をおいて再度お試しください。";
+  return "現在登録処理を利用できません。管理者へお問い合わせください。";
 }
 
 function loginErrorMessage(res: { reason?: string }) {
-  if (res.reason === "existing_not_found") return "既存参加者データにこのX IDが見つかりません";
-  if (res.reason === "participation_mismatch") return "X IDと参加回数が一致しません";
-  if (res.reason === "not_found") return "このX IDは未登録です";
-  if (res.reason === "password_required") return "パスワードを入力してください";
-  if (res.reason === "admin_password_not_configured") return "ADMIN_PASSWORD が設定されていません";
-  return "ログインに失敗しました";
+  if (res.reason === "existing_not_found") return "既存参加者データにこのX IDが見つかりません。";
+  if (res.reason === "participation_mismatch") return "X IDと参加回数が一致しません。";
+  if (res.reason === "not_found") return "このX IDは未登録です。";
+  if (res.reason === "password_required") return "パスワードを入力してください。";
+  if (res.reason === "admin_password_not_configured") return "管理者パスワードが設定されていません。";
+  if (res.reason === "network_error") return "通信に失敗しました。時間をおいて再度お試しください。";
+  return "ログインに失敗しました。";
 }
 
 function AuthPage() {
@@ -85,7 +89,7 @@ function AuthPage() {
 
     const normalized = normalizeXId(xid);
     if (!isValidXId(normalized)) {
-      toast.error("X IDは半角英数字とアンダースコア、最大15文字で入力してください");
+      toast.error("X IDは半角英数字とアンダースコア、最大15文字で入力してください。");
       return;
     }
 
@@ -94,7 +98,7 @@ function AuthPage() {
       if (mode === "login") {
         const check = await exists({ data: { x_id_normalized: normalized } });
         if (!check.exists) {
-          toast.error("このX IDは未登録です。既存ユーザーまたは新規登録を使ってください");
+          toast.error("このX IDは未登録です。既存ユーザーまたは新規登録を使ってください。");
           return;
         }
 
@@ -107,7 +111,7 @@ function AuthPage() {
       if (mode === "existing") {
         const n = Number(past);
         if (!Number.isInteger(n) || n < 0 || n > 100000) {
-          toast.error("参加回数は0以上の整数で入力してください");
+          toast.error("参加回数は0以上の整数で入力してください。");
           return;
         }
         pastNum = n;
@@ -139,7 +143,12 @@ function AuthPage() {
       const ok = await signIn(normalized, mode === "existing" ? pastNum : undefined);
       if (ok) goAfterLogin(normalized);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "エラーが発生しました");
+      console.error("[auth] submit failed", err);
+      toast.error(
+        isNetworkError(err)
+          ? "通信に失敗しました。時間をおいて再度お試しください。"
+          : "現在登録処理を利用できません。管理者へお問い合わせください。",
+      );
     } finally {
       setLoading(false);
     }
@@ -150,7 +159,7 @@ function AuthPage() {
       <div className="w-full max-w-md">
         <header className="text-center mb-8">
           <h1 className="font-display text-4xl text-gold-gradient">810Day毎日くじ</h1>
-          <p className="mt-2 text-sm text-muted-foreground">X IDで参加できます</p>
+          <p className="mt-2 text-sm text-muted-foreground">X IDで参加できます。</p>
         </header>
 
         <div className="card-luxe rounded-2xl p-1 mb-6">
@@ -182,6 +191,7 @@ function AuthPage() {
               onChange={setPassword}
               placeholder="管理者または変更済みユーザーのみ"
               type="password"
+              required={isAdminXId(normalizeXId(xid))}
             />
           )}
 
@@ -215,6 +225,7 @@ function Field({
   placeholder,
   inputMode,
   type = "text",
+  required = true,
 }: {
   label: string;
   value: string;
@@ -222,6 +233,7 @@ function Field({
   placeholder?: string;
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
   type?: string;
+  required?: boolean;
 }) {
   return (
     <div>
@@ -236,7 +248,7 @@ function Field({
         autoCapitalize="off"
         autoCorrect="off"
         spellCheck={false}
-        required
+        required={required}
       />
     </div>
   );

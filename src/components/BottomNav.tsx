@@ -7,13 +7,13 @@ export function BottomNav() {
   const isAdmin = adminData?.isAdmin ?? false;
   const items = isAdmin
     ? [
-        { to: "/profile", label: "プロフィール", Icon: User },
-        { to: "/admin", label: "管理", Icon: Shield },
+        { to: "/profile", label: "Profile", Icon: User },
+        { to: "/admin", label: "Admin", Icon: Shield },
       ]
     : [
-        { to: "/dashboard", label: "ホーム", Icon: Home },
-        { to: "/history", label: "履歴", Icon: History },
-        { to: "/profile", label: "プロフィール", Icon: User },
+        { to: "/dashboard", label: "Home", Icon: Home },
+        { to: "/history", label: "History", Icon: History },
+        { to: "/profile", label: "Profile", Icon: User },
       ];
 
   return (
