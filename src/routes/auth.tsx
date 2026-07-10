@@ -1,5 +1,4 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import type { FormEvent, HTMLAttributes } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -8,6 +7,7 @@ import { isValidXId, normalizeXId } from "@/lib/xid";
 import { loginWithXId, registerNewUser, xIdExists } from "@/lib/participation.functions";
 
 export const Route = createFileRoute("/auth")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "ログイン / 新規登録 | 810Day毎日くじ" },
@@ -25,9 +25,6 @@ function AuthPage() {
   const [past, setPast] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const register = useServerFn(registerNewUser);
-  const exists = useServerFn(xIdExists);
-  const login = useServerFn(loginWithXId);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -42,12 +39,12 @@ function AuthPage() {
     setLoading(true);
     try {
       if (mode === "login") {
-        const check = await exists({ data: { x_id_normalized: normalized } });
+        const check = await xIdExists({ data: { x_id_normalized: normalized } });
         if (!check.exists) {
           toast.error("このX IDは未登録です。新規登録してください");
           return;
         }
-        const res = await login({ data: { x_id_normalized: normalized } });
+        const res = await loginWithXId({ data: { x_id_normalized: normalized } });
         if (!res.ok) {
           toast.error("ログインに失敗しました");
           return;
@@ -70,7 +67,7 @@ function AuthPage() {
         pastNum = n;
       }
 
-      const res = await register({
+      const res = await registerNewUser({
         data: {
           x_id_display: xid.trim(),
           x_id_normalized: normalized,
@@ -84,7 +81,7 @@ function AuthPage() {
       }
 
       // Sign in after registration using the same server-side path
-      const loginRes = await login({ data: { x_id_normalized: normalized } });
+      const loginRes = await loginWithXId({ data: { x_id_normalized: normalized } });
       if (!loginRes.ok) {
         toast.error("登録は完了しましたが、ログインに失敗しました。ログインページからお試しください");
         return;
