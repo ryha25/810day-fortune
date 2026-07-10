@@ -38,11 +38,18 @@ async function hasAuthTokenColumn(supabaseAdmin: any): Promise<boolean> {
   return !(error.code === "42703" || /auth_token/i.test(error.message ?? ""));
 }
 
+async function hasProfileColumn(supabaseAdmin: any, column: string): Promise<boolean> {
+  const { error } = await supabaseAdmin.from("profiles").select(column).limit(1);
+  if (!error) return true;
+  return !(error.code === "42703" || new RegExp(column, "i").test(error.message ?? ""));
+}
+
 async function ensureAdminRoleForKnownAccount(supabaseAdmin: any, userId: string, xId: string) {
   if (xId !== "ryuyah25") return;
-  await supabaseAdmin
+  const { error } = await supabaseAdmin
     .from("user_roles")
     .upsert({ user_id: userId, role: "admin" }, { onConflict: "user_id,role" });
+  logSupabaseError("ensureAdminRoleForKnownAccount", error);
 }
 
 function isKnownAdminXId(xId: string): boolean {
@@ -177,6 +184,8 @@ export const registerNewUser = createServerFn({ method: "POST" })
       }
 
       const canUseAuthToken = await hasAuthTokenColumn(supabaseAdmin);
+      const hasAuthUserId = await hasProfileColumn(supabaseAdmin, "auth_user_id");
+      const hasRole = await hasProfileColumn(supabaseAdmin, "role");
       const authToken = randomUUID();
       const email = xIdToEmail(data.x_id_normalized);
       const password = canUseAuthToken ? authToken : xIdToPassword(data.x_id_normalized);
@@ -211,8 +220,10 @@ export const registerNewUser = createServerFn({ method: "POST" })
 
       const { error: profErr } = await supabaseAdmin.from("profiles").insert({
         id: userId,
+        ...(hasAuthUserId ? { auth_user_id: userId } : {}),
         x_id_normalized: data.x_id_normalized,
         x_id_display: displayXId,
+        ...(hasRole ? { role: "user" } : {}),
         ...(canUseAuthToken ? { auth_token: authToken } : {}),
         participation_count: pc,
         win_count: seed?.win_count ?? 0,
