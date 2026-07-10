@@ -19,6 +19,14 @@ export const Route = createFileRoute("/auth")({
 
 type Mode = "login" | "existing" | "new";
 
+function registerErrorMessage(res: { reason?: string; message?: string }) {
+  if (res.reason === "duplicate_x_id") return "このX IDは既に登録されています";
+  if (res.message) return `登録に失敗しました: ${res.message}`;
+  if (res.reason === "auth_failed") return "認証ユーザーの作成に失敗しました";
+  if (res.reason === "profile_failed") return "プロフィールの作成に失敗しました";
+  return "登録に失敗しました";
+}
+
 function AuthPage() {
   const [mode, setMode] = useState<Mode>("login");
   const [xid, setXid] = useState("");
@@ -89,7 +97,7 @@ function AuthPage() {
       });
 
       if (!res.ok) {
-        toast.error(res.reason === "duplicate_x_id" ? "このX IDは既に登録されています" : "登録に失敗しました");
+        toast.error(registerErrorMessage(res));
         return;
       }
 

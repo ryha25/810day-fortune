@@ -29,6 +29,15 @@ async function ensureAdminRoleForKnownAccount(supabaseAdmin: any, userId: string
     .upsert({ user_id: userId, role: "admin" }, { onConflict: "user_id,role" });
 }
 
+async function deleteOrphanAuthUserByEmail(supabaseAdmin: any, email: string) {
+  const { data, error } = await supabaseAdmin.auth.admin.listUsers();
+  if (error) return false;
+  const user = data.users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+  if (!user) return false;
+  const { error: deleteErr } = await supabaseAdmin.auth.admin.deleteUser(user.id);
+  return !deleteErr;
+}
+
 export const confirmDailyParticipation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -167,11 +176,23 @@ export const registerNewUser = createServerFn({ method: "POST" })
     const email = xIdToEmail(data.x_id_normalized);
     const password = canUseAuthToken ? authToken : xIdToPassword(data.x_id_normalized);
 
-    const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+    let { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
     });
+    if (createErr && /already|registered|exists/i.test(createErr.message ?? "")) {
+      const cleaned = await deleteOrphanAuthUserByEmail(supabaseAdmin, email);
+      if (cleaned) {
+        const retry = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+        });
+        created = retry.data;
+        createErr = retry.error;
+      }
+    }
     if (createErr || !created.user) {
       return { ok: false as const, reason: "auth_failed" as const, message: createErr?.message };
     }
