@@ -12,6 +12,7 @@ function calcRate(count: number): number {
   if (count >= 20) return 50;
   return (count - 10) * 5;
 }
+
 function calcGauge(count: number): number {
   return Math.min(30, Math.floor(count * 0.5));
 }
@@ -67,54 +68,21 @@ export const confirmDailyParticipation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const userId = context.userId;
-    const date = todayJst();
-
-    const { data: existing } = await supabaseAdmin
-      .from("daily_participations")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("participation_date", date)
-      .maybeSingle();
-
-    if (existing) {
-      return { ok: false as const, reason: "already_participated" as const };
-    }
-
-    const { data: profile, error: pErr } = await supabaseAdmin
-      .from("profiles")
-      .select("participation_count, confirm_gauge")
-      .eq("id", userId)
-      .single();
-    if (pErr || !profile) throw new Error("プロフィールが見つかりません");
-
-    const newCount = profile.participation_count + 1;
-    const newGauge = Math.min(30, profile.confirm_gauge + 1);
-    const newRate = calcRate(newCount);
-
-    const { error: insErr } = await supabaseAdmin
-      .from("daily_participations")
-      .insert({ user_id: userId, participation_date: date });
-    if (insErr) {
-      if (insErr.code === "23505") return { ok: false as const, reason: "already_participated" as const };
-      throw insErr;
-    }
-
-    const { error: updErr } = await supabaseAdmin
-      .from("profiles")
-      .update({
-        participation_count: newCount,
-        confirm_gauge: newGauge,
-        redemption_rate: newRate,
-      })
-      .eq("id", userId);
-    if (updErr) throw updErr;
-
-    return {
-      ok: true as const,
-      participation_count: newCount,
-      confirm_gauge: newGauge,
-      redemption_rate: newRate,
+    const { data, error } = await (supabaseAdmin as any).rpc("record_daily_post_participation", {
+      _user_id: context.userId,
+      _participation_date: todayJst(),
+    });
+    if (error) throw error;
+    return data as {
+      ok: true;
+      daily_participated: true;
+      daily_inserted: boolean;
+      stat_incremented: boolean;
+      participation_count: number;
+      confirm_gauge: number;
+      redemption_rate: number;
+      win_count: number;
+      participation_date: string;
     };
   });
 
@@ -122,35 +90,22 @@ export const registerOfficialFollow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const userId = context.userId;
-
-    const { data: profile, error: pErr } = await supabaseAdmin
-      .from("profiles")
-      .select("participation_count, confirm_gauge, official_follow_registered")
-      .eq("id", userId)
-      .single();
-    if (pErr || !profile) throw new Error("プロフィールが見つかりません");
-
-    if (profile.official_follow_registered) {
-      return { ok: false as const, reason: "already_registered" as const };
-    }
-
-    const newCount = profile.participation_count + 1;
-    const newGauge = Math.min(30, profile.confirm_gauge + 1);
-    const newRate = calcRate(newCount);
-
-    const { error } = await supabaseAdmin
-      .from("profiles")
-      .update({
-        participation_count: newCount,
-        confirm_gauge: newGauge,
-        redemption_rate: newRate,
-        official_follow_registered: true,
-      })
-      .eq("id", userId);
+    const { data, error } = await (supabaseAdmin as any).rpc("register_official_follow_participation", {
+      _user_id: context.userId,
+      _participation_date: todayJst(),
+    });
     if (error) throw error;
-
-    return { ok: true as const, participation_count: newCount, confirm_gauge: newGauge, redemption_rate: newRate };
+    return data as {
+      ok: true;
+      official_follow_registered: true;
+      follow_first_registered: boolean;
+      stat_incremented: boolean;
+      participation_count: number;
+      confirm_gauge: number;
+      redemption_rate: number;
+      win_count: number;
+      participation_date: string;
+    };
   });
 
 export const checkTodayParticipation = createServerFn({ method: "GET" })
@@ -167,17 +122,12 @@ export const checkTodayParticipation = createServerFn({ method: "GET" })
     return { participated: !!data, date };
   });
 
-// Sign-up: creates auth user + profile atomically with a server-generated random
-// auth_token. The token is stored in profiles (service-role only column) and
-// is never sent to the browser, preventing account takeover via X ID guessing.
 export const registerNewUser = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
         x_id_display: z.string().min(1).max(20),
-        x_id_normalized: z
-          .string()
-          .regex(/^[a-z0-9_]{1,15}$/),
+        x_id_normalized: z.string().regex(/^[a-z0-9_]{1,15}$/),
         existing: z.boolean(),
         past_participation: z.number().int().min(0).max(100000).optional(),
       })
@@ -187,7 +137,6 @@ export const registerNewUser = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { randomUUID } = await import("node:crypto");
 
-    // reject duplicate X ID
     const { data: dup } = await supabaseAdmin
       .from("profiles")
       .select("id")
@@ -205,7 +154,6 @@ export const registerNewUser = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "existing_participant" as const };
     }
 
-    // Generate credentials entirely server-side — never derived from public X ID.
     const canUseAuthToken = await hasAuthTokenColumn(supabaseAdmin);
     const authToken = randomUUID();
     const email = xIdToEmail(data.x_id_normalized);
@@ -231,26 +179,24 @@ export const registerNewUser = createServerFn({ method: "POST" })
     if (createErr || !created.user) {
       return { ok: false as const, reason: "auth_failed" as const, message: createErr?.message };
     }
+
     const userId = created.user.id;
     const pc = seed?.participation_count ?? 0;
     const gauge = seed?.confirm_gauge ?? calcGauge(pc);
     const rate = seed?.redemption_rate ?? calcRate(pc);
-    const winCount = seed?.win_count ?? 0;
-    const xIdDisplay = seed?.x_id_display ?? data.x_id_display;
 
     const { error: profErr } = await supabaseAdmin.from("profiles").insert({
       id: userId,
       x_id_normalized: data.x_id_normalized,
-      x_id_display: xIdDisplay,
+      x_id_display: seed?.x_id_display ?? data.x_id_display,
       ...(canUseAuthToken ? { auth_token: authToken } : {}),
       participation_count: pc,
-      win_count: winCount,
+      win_count: seed?.win_count ?? 0,
       redemption_rate: rate,
       confirm_gauge: gauge,
       official_follow_registered: false,
     });
     if (profErr) {
-      // rollback auth user
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return { ok: false as const, reason: "profile_failed" as const, message: profErr.message };
     }
@@ -260,16 +206,13 @@ export const registerNewUser = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
-// Server-side login: looks up the stored auth_token and signs in on behalf of
-// the user. Returns JWT session tokens so the client can call setSession().
-// The auth_token column is protected from authenticated SELECT — it only flows
-// through this server function, never to the browser.
 export const loginWithXId = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
         x_id_normalized: z.string().regex(/^[a-z0-9_]{1,15}$/),
         past_participation: z.number().int().min(0).max(100000).optional(),
+        password: z.string().optional(),
       })
       .parse(d),
   )
@@ -295,11 +238,11 @@ export const loginWithXId = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "not_found" as const };
     }
 
-    const email = xIdToEmail(data.x_id_normalized);
-    const password = canUseAuthToken && row.auth_token ? row.auth_token : xIdToPassword(data.x_id_normalized);
+    const password = data.password || (canUseAuthToken && row.auth_token ? row.auth_token : xIdToPassword(data.x_id_normalized));
+    if (!password) return { ok: false as const, reason: "password_required" as const };
+
     const SUPABASE_URL = process.env.SUPABASE_URL!;
     const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
-
     const { createClient } = await import("@supabase/supabase-js");
     const { default: WebSocket } = await import("ws");
     const authClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -308,7 +251,7 @@ export const loginWithXId = createServerFn({ method: "POST" })
     });
 
     const { data: session, error: signInErr } = await authClient.auth.signInWithPassword({
-      email,
+      email: xIdToEmail(data.x_id_normalized),
       password,
     });
 
@@ -325,7 +268,53 @@ export const loginWithXId = createServerFn({ method: "POST" })
     };
   });
 
-// Lookup existence of X ID (for login form)
+export const changeMyPassword = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        current_password: z.string().min(1),
+        new_password: z.string().min(8).max(128),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: profile, error: profileErr } = await supabaseAdmin
+      .from("profiles")
+      .select("id,x_id_normalized")
+      .eq("id", context.userId)
+      .single();
+    if (profileErr || !profile) throw new Error("プロフィールが見つかりません");
+
+    const SUPABASE_URL = process.env.SUPABASE_URL!;
+    const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
+    const { createClient } = await import("@supabase/supabase-js");
+    const { default: WebSocket } = await import("ws");
+    const authClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      realtime: { transport: WebSocket as any },
+      auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+    });
+
+    const { error: signInErr } = await authClient.auth.signInWithPassword({
+      email: xIdToEmail(profile.x_id_normalized),
+      password: data.current_password,
+    });
+    if (signInErr) return { ok: false as const, reason: "current_password_invalid" as const };
+
+    const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(context.userId, {
+      password: data.new_password,
+    });
+    if (updateErr) throw updateErr;
+
+    const canUseAuthToken = await hasAuthTokenColumn(supabaseAdmin);
+    if (canUseAuthToken) {
+      await supabaseAdmin.from("profiles").update({ auth_token: null }).eq("id", context.userId);
+    }
+
+    return { ok: true as const };
+  });
+
 export const xIdExists = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ x_id_normalized: z.string() }).parse(d))
   .handler(async ({ data }) => {

@@ -35,6 +35,57 @@ export type Database = {
         }
         Relationships: []
       }
+      participation_stat_days: {
+        Row: {
+          created_at: string
+          participation_date: string
+          source: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          participation_date: string
+          source: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          participation_date?: string
+          source?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profile_stat_audit_logs: {
+        Row: {
+          admin_user_id: string
+          created_at: string
+          field_name: string
+          id: string
+          new_value: number
+          old_value: number
+          target_user_id: string
+        }
+        Insert: {
+          admin_user_id: string
+          created_at?: string
+          field_name: string
+          id?: string
+          new_value: number
+          old_value: number
+          target_user_id: string
+        }
+        Update: {
+          admin_user_id?: string
+          created_at?: string
+          field_name?: string
+          id?: string
+          new_value?: number
+          old_value?: number
+          target_user_id?: string
+        }
+        Relationships: []
+      }
       existing_participants: {
         Row: {
           confirm_gauge: number
@@ -70,6 +121,7 @@ export type Database = {
       }
       lottery_draws: {
         Row: {
+          canceled_at: string | null
           created_at: string
           daily_participants_count: number
           daily_winner_by_gauge: boolean
@@ -80,8 +132,11 @@ export type Database = {
           follow_winner_by_gauge: boolean
           follow_winner_user_id: string | null
           id: string
+          is_test: boolean
+          test_snapshot: Json | null
         }
         Insert: {
+          canceled_at?: string | null
           created_at?: string
           daily_participants_count?: number
           daily_winner_by_gauge?: boolean
@@ -92,8 +147,11 @@ export type Database = {
           follow_winner_by_gauge?: boolean
           follow_winner_user_id?: string | null
           id?: string
+          is_test?: boolean
+          test_snapshot?: Json | null
         }
         Update: {
+          canceled_at?: string | null
           created_at?: string
           daily_participants_count?: number
           daily_winner_by_gauge?: boolean
@@ -104,6 +162,8 @@ export type Database = {
           follow_winner_by_gauge?: boolean
           follow_winner_user_id?: string | null
           id?: string
+          is_test?: boolean
+          test_snapshot?: Json | null
         }
         Relationships: []
       }
@@ -128,11 +188,13 @@ export type Database = {
       lottery_winners: {
         Row: {
           by_gauge: boolean
+          canceled_at: string | null
           created_at: string
           discord_id: string | null
           draw_date: string
           draw_id: string
           id: string
+          is_test: boolean
           kind: string
           redemption_rate: number
           reward_inmu: number
@@ -144,11 +206,13 @@ export type Database = {
         }
         Insert: {
           by_gauge?: boolean
+          canceled_at?: string | null
           created_at?: string
           discord_id?: string | null
           draw_date: string
           draw_id: string
           id?: string
+          is_test?: boolean
           kind: string
           redemption_rate: number
           reward_inmu: number
@@ -160,11 +224,13 @@ export type Database = {
         }
         Update: {
           by_gauge?: boolean
+          canceled_at?: string | null
           created_at?: string
           discord_id?: string | null
           draw_date?: string
           draw_id?: string
           id?: string
+          is_test?: boolean
           kind?: string
           redemption_rate?: number
           reward_inmu?: number
@@ -250,7 +316,27 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_update_profile_stats: {
+        Args: {
+          _admin_user_id: string
+          _confirm_gauge: number
+          _participation_count: number
+          _redemption_rate: number
+          _target_user_id: string
+          _win_count: number
+        }
+        Returns: Json
+      }
+      apply_daily_participation_increment: {
+        Args: {
+          _participation_date: string
+          _source: string
+          _user_id: string
+        }
+        Returns: Json
+      }
       calc_redemption_rate: { Args: { _count: number }; Returns: number }
+      cancel_test_draw: { Args: { _draw_id: string }; Returns: Json }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -258,7 +344,23 @@ export type Database = {
         }
         Returns: boolean
       }
+      record_daily_post_participation: {
+        Args: { _participation_date?: string | null; _user_id: string }
+        Returns: Json
+      }
+      register_official_follow_participation: {
+        Args: { _participation_date?: string | null; _user_id: string }
+        Returns: Json
+      }
       run_daily_draw: {
+        Args: { _draw_date?: string | null }
+        Returns: Json
+      }
+      run_daily_draw_core: {
+        Args: { _draw_date: string; _is_test: boolean }
+        Returns: Json
+      }
+      run_test_draw: {
         Args: { _draw_date?: string | null }
         Returns: Json
       }

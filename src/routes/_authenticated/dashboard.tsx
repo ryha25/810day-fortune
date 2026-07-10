@@ -67,6 +67,7 @@ function Dashboard() {
       qc.invalidateQueries({ queryKey: ["today-participation"] }),
       qc.invalidateQueries({ queryKey: ["profile", "self"] }),
       qc.invalidateQueries({ queryKey: ["admin-eligible"] }),
+      qc.invalidateQueries({ queryKey: ["admin-participants"] }),
     ]);
   }
 

@@ -34,6 +34,7 @@ function loginErrorMessage(res: { reason?: string }) {
   if (res.reason === "existing_not_found") return "既存参加者データにこのX IDが見つかりません";
   if (res.reason === "participation_mismatch") return "X IDと参加回数が一致しません";
   if (res.reason === "not_found") return "このX IDは未登録です";
+  if (res.reason === "password_required") return "パスワードを入力してください";
   return "ログインに失敗しました";
 }
 
@@ -41,6 +42,7 @@ function AuthPage() {
   const [mode, setMode] = useState<Mode>("login");
   const [xid, setXid] = useState("");
   const [past, setPast] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const register = useServerFn(registerNewUser);
@@ -52,6 +54,7 @@ function AuthPage() {
       data: {
         x_id_normalized: normalized,
         ...(pastParticipation !== undefined ? { past_participation: pastParticipation } : {}),
+        ...(password ? { password } : {}),
       },
     });
     if (!res.ok) {
@@ -163,6 +166,16 @@ function AuthPage() {
         <form onSubmit={handleSubmit} className="card-luxe rounded-2xl p-6 space-y-4">
           <Field label="X ID" value={xid} onChange={setXid} placeholder="@sample または sample" />
 
+          {mode === "login" && (
+            <Field
+              label="パスワード"
+              value={password}
+              onChange={setPassword}
+              placeholder="変更後のパスワードがある場合のみ"
+              type="password"
+            />
+          )}
+
           {mode === "existing" && (
             <Field
               label="これまでの参加回数"
@@ -192,18 +205,21 @@ function Field({
   onChange,
   placeholder,
   inputMode,
+  type = "text",
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
+  type?: string;
 }) {
   return (
     <div>
       <label className="block text-xs font-semibold mb-1.5 text-[oklch(0.82_0.15_88)]">{label}</label>
       <input
         value={value}
+        type={type}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         inputMode={inputMode}
