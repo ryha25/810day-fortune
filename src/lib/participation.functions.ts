@@ -230,7 +230,9 @@ export const loginWithXId = createServerFn({ method: "POST" })
     const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY!;
 
     const { createClient } = await import("@supabase/supabase-js");
+    const { default: WebSocket } = await import("ws");
     const authClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      realtime: { transport: WebSocket as any },
       auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
     });
 
