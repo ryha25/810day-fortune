@@ -76,19 +76,69 @@ export const getTodayDrawForMe = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const date = todayJst();
+    const { data: myTestWinner, error: testWinnerErr } = await supabaseAdmin
+      .from("lottery_winners")
+      .select("draw_id,user_id,x_id_display,x_id_normalized,kind,slot,by_gauge,redemption_rate,reward_inmu,is_test")
+      .eq("user_id", context.userId)
+      .eq("is_test", true)
+      .is("canceled_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (testWinnerErr) throw testWinnerErr;
+
+    const testDrawId = myTestWinner?.draw_id;
+    const { data: testSeenRow } = testDrawId
+      ? await supabaseAdmin
+          .from("lottery_result_views")
+          .select("seen_at,result_confirmed")
+          .eq("draw_id", testDrawId)
+          .eq("user_id", context.userId)
+          .maybeSingle()
+      : { data: null };
+
+    if (myTestWinner && !testSeenRow?.result_confirmed) {
+      const { data: testDraw, error: testDrawErr } = await supabaseAdmin
+        .from("lottery_draws")
+        .select("id,draw_date,executed_at,is_test,daily_winner_user_id,daily_winner_by_gauge,follow_winner_user_id,follow_winner_by_gauge")
+        .eq("id", myTestWinner.draw_id)
+        .eq("is_test", true)
+        .is("canceled_at", null)
+        .maybeSingle();
+      if (testDrawErr) throw testDrawErr;
+
+      const { data: testWinners, error: testWinnersErr } = await supabaseAdmin
+        .from("lottery_winners")
+        .select("user_id,x_id_display,x_id_normalized,kind,slot,by_gauge,redemption_rate,reward_inmu,is_test")
+        .eq("draw_id", myTestWinner.draw_id)
+        .eq("is_test", true)
+        .is("canceled_at", null);
+      if (testWinnersErr) throw testWinnersErr;
+
+      return {
+        date,
+        draw: testDraw,
+        winners: testWinners ?? [],
+        myWin: myTestWinner,
+        seen: !!testSeenRow,
+        resultConfirmed: !!testSeenRow?.result_confirmed,
+        isTest: true,
+      };
+    }
+
     const { data: draw, error: drawErr } = await supabaseAdmin
       .from("lottery_draws")
-      .select("id,draw_date,executed_at,daily_winner_user_id,daily_winner_by_gauge,follow_winner_user_id,follow_winner_by_gauge")
+      .select("id,draw_date,executed_at,is_test,daily_winner_user_id,daily_winner_by_gauge,follow_winner_user_id,follow_winner_by_gauge")
       .eq("draw_date", date)
       .eq("is_test", false)
       .is("canceled_at", null)
       .maybeSingle();
     if (drawErr) throw drawErr;
-    if (!draw) return { date, draw: null, winners: [], myWin: null, seen: true, resultConfirmed: true };
+    if (!draw) return { date, draw: null, winners: [], myWin: null, seen: true, resultConfirmed: true, isTest: false };
 
     const { data: winners, error: wErr } = await supabaseAdmin
       .from("lottery_winners")
-      .select("user_id,x_id_display,x_id_normalized,kind,slot,by_gauge,redemption_rate,reward_inmu")
+      .select("user_id,x_id_display,x_id_normalized,kind,slot,by_gauge,redemption_rate,reward_inmu,is_test")
       .eq("draw_id", draw.id)
       .eq("is_test", false)
       .is("canceled_at", null);
@@ -109,6 +159,7 @@ export const getTodayDrawForMe = createServerFn({ method: "GET" })
       myWin: mine,
       seen: !!seenRow,
       resultConfirmed: !!seenRow?.result_confirmed,
+      isTest: false,
     };
   });
 
@@ -117,6 +168,40 @@ export const markDrawSeen = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ draw_id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: draw, error: drawErr } = await supabaseAdmin
+      .from("lottery_draws")
+      .select("id,is_test")
+      .eq("id", data.draw_id)
+      .maybeSingle();
+    if (drawErr) throw drawErr;
+    if (!draw) return { ok: false, reason: "draw_not_found" };
+
+    if (draw.is_test) {
+      const { data: testWinner, error: winnerErr } = await supabaseAdmin
+        .from("lottery_winners")
+        .select("id")
+        .eq("draw_id", data.draw_id)
+        .eq("user_id", context.userId)
+        .eq("is_test", true)
+        .is("canceled_at", null)
+        .maybeSingle();
+      if (winnerErr) throw winnerErr;
+      if (!testWinner) return { ok: false, reason: "winner_not_found" };
+
+      const { error: viewErr } = await supabaseAdmin.from("lottery_result_views").upsert(
+        {
+          draw_id: data.draw_id,
+          user_id: context.userId,
+          seen_at: new Date().toISOString(),
+          result_confirmed: true,
+          confirmed_at: new Date().toISOString(),
+        },
+        { onConflict: "draw_id,user_id" },
+      );
+      if (viewErr) throw viewErr;
+      return { ok: true, already_confirmed: false, stat_updated: false, is_test: true };
+    }
+
     const { data: result, error } = await (supabaseAdmin as any).rpc("confirm_draw_result", {
       _user_id: context.userId,
       _draw_id: data.draw_id,

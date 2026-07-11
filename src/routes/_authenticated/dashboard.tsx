@@ -43,6 +43,7 @@ function Dashboard() {
 
   const myWin = todayDraw?.myWin;
   const shouldCelebrate = !!myWin && !todayDraw?.resultConfirmed;
+  const isTestDraw = !!todayDraw?.isTest;
 
   const winnersBySlot = useMemo(() => {
     const winners = todayDraw?.winners ?? [];
@@ -193,7 +194,7 @@ function Dashboard() {
 
         <section className="card-luxe rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="font-display text-xl text-gold-gradient">本日の抽選結果</h2>
+            <h2 className="font-display text-xl text-gold-gradient">{isTestDraw ? "テスト抽選結果" : "本日の抽選結果"}</h2>
             <Link to="/history" className="inline-flex items-center gap-1 text-xs text-[oklch(0.82_0.15_88)]">
               <History className="h-4 w-4" /> 履歴
             </Link>
@@ -203,15 +204,19 @@ function Dashboard() {
           ) : (
             <>
               <ResultLine label="抽選日" value={todayDraw.draw.draw_date} />
+              {isTestDraw && <ResultLine label="種別" value="テスト抽選" />}
               <ResultLine label="毎日投稿枠" value={formatWinner(winnersBySlot.daily)} />
               <ResultLine label="公式Xフォロー枠" value={formatWinner(winnersBySlot.follow)} />
               {myWin ? (
                 <div className="rounded-xl border border-[oklch(0.82_0.15_88/0.45)] p-3">
-                  <div className="font-display text-lg text-gold-gradient">{myWin.kind === "w" ? "W当選" : "通常当選"}</div>
+                  <div className="font-display text-lg text-gold-gradient">{isTestDraw ? "テスト当選" : myWin.kind === "w" ? "W当選" : "通常当選"}</div>
                   <div className="text-sm mt-1">当選報酬 {myWin.reward_inmu.toLocaleString()} INMU</div>
-                  <button onClick={shareWin} className="btn-gold mt-3 w-full rounded-lg py-2 text-sm font-semibold inline-flex items-center justify-center gap-2">
-                    <Share2 className="h-4 w-4" /> Xでシェア
-                  </button>
+                  {isTestDraw && <p className="mt-1 text-xs text-muted-foreground">テスト抽選のため本番履歴には含まれません。</p>}
+                  {!isTestDraw && (
+                    <button onClick={shareWin} className="btn-gold mt-3 w-full rounded-lg py-2 text-sm font-semibold inline-flex items-center justify-center gap-2">
+                      <Share2 className="h-4 w-4" /> Xでシェア
+                    </button>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">今回は未当選です。</p>
