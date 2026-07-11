@@ -315,7 +315,8 @@ export const loginWithXId = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "admin_password_not_configured" as const };
     }
 
-    let password = data.password || (canUseAuthToken && row.auth_token ? row.auth_token : xIdToPassword(data.x_id_normalized));
+    const defaultPassword = canUseAuthToken && row.auth_token ? row.auth_token : xIdToPassword(data.x_id_normalized);
+    let password = data.password || defaultPassword;
     if (isAdminPasswordLogin) {
       const { error: updatePasswordErr } = await supabaseAdmin.auth.admin.updateUserById(row.id, {
         password: adminPassword,
@@ -340,10 +341,19 @@ export const loginWithXId = createServerFn({ method: "POST" })
       auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
     });
 
-    const { data: session, error: signInErr } = await authClient.auth.signInWithPassword({
+    let { data: session, error: signInErr } = await authClient.auth.signInWithPassword({
       email: xIdToEmail(data.x_id_normalized),
       password,
     });
+
+    if (signInErr && data.password && !isKnownAdminXId(data.x_id_normalized) && defaultPassword && defaultPassword !== data.password) {
+      const retry = await authClient.auth.signInWithPassword({
+        email: xIdToEmail(data.x_id_normalized),
+        password: defaultPassword,
+      });
+      session = retry.data;
+      signInErr = retry.error;
+    }
 
     if (signInErr || !session.session) {
       logSupabaseError("loginWithXId.signInWithPassword", signInErr);

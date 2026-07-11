@@ -63,7 +63,7 @@ function AuthPage() {
       data: {
         x_id_normalized: normalized,
         ...(pastParticipation !== undefined ? { past_participation: pastParticipation } : {}),
-        ...(password ? { password } : {}),
+        ...(isAdminXId(normalized) && password ? { password } : {}),
       },
     });
     if (!res.ok) {
