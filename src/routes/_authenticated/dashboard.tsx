@@ -165,7 +165,7 @@ function Dashboard() {
     if (!myWin) return;
     const text =
       myWin.kind === "w"
-        ? `810Day毎日くじでW当選しました🎯🎯\n当選報酬\n200000INMU\n${DISCORD_NOTE}\n#810Day毎日宝くじ`
+        ? `810Day毎日くじでW当選しました🎯🎯\n当選報酬\n${myWin.reward_inmu}INMU\n${DISCORD_NOTE}\n#810Day毎日宝くじ`
         : `810Day毎日くじに当選しました🎯\n当選報酬\n${myWin.reward_inmu}INMU\n${DISCORD_NOTE}\n#810Day毎日宝くじ`;
     window.open(`https://x.com/intent/post?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
   }

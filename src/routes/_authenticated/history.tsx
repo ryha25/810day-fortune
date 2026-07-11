@@ -59,7 +59,7 @@ function HistoryPage() {
                 </div>
                 <Line label="毎日投稿枠" value={formatWinner(daily)} />
                 <Line label="公式Xフォロー枠" value={formatWinner(follow)} />
-                <Line label="報酬" value={w ? "200,000 INMU" : winners.map((winner: any) => `${winner.reward_inmu.toLocaleString()} INMU`).join(" / ") || "-"} />
+                <Line label="報酬" value={w ? `${w.reward_inmu.toLocaleString()} INMU` : winners.map((winner: any) => `${winner.reward_inmu.toLocaleString()} INMU`).join(" / ") || "-"} />
               </article>
             );
           })}

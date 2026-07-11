@@ -72,11 +72,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: "A daily lottery app for 810Day.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: "/app-icon.png" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: "/app-icon.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/app-icon.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/app-icon.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "" },
       {

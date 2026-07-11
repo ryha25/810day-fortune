@@ -46,6 +46,8 @@ function AdminPage() {
   const [editing, setEditing] = useState<any | null>(null);
   const [drawTime, setDrawTime] = useState("12:00");
   const [cutoffTime, setCutoffTime] = useState("11:59");
+  const [normalReward, setNormalReward] = useState("10000");
+  const [wReward, setWReward] = useState("200000");
 
   const { data: eligible, refetch: refetchEligible } = useQuery({
     queryKey: ["admin-eligible"],
@@ -72,16 +74,25 @@ function AdminPage() {
     if (!lotterySettings) return;
     setDrawTime((lotterySettings.draw_time_jst ?? "12:00").slice(0, 5));
     setCutoffTime((lotterySettings.participation_cutoff_time_jst ?? "11:59").slice(0, 5));
+    setNormalReward(String(lotterySettings.normal_base_reward_inmu ?? 10000));
+    setWReward(String(lotterySettings.w_reward_inmu ?? 200000));
   }, [lotterySettings]);
 
   const updateSettings = useMutation({
-    mutationFn: () =>
-      adminUpdateLotterySettings({
+    mutationFn: () => {
+      const normal = Number(normalReward);
+      const w = Number(wReward);
+      if (!Number.isInteger(normal) || normal < 0) throw new Error("通常当選の基本報酬は0以上の整数で入力してください");
+      if (!Number.isInteger(w) || w < 0) throw new Error("W当選報酬は0以上の整数で入力してください");
+      return adminUpdateLotterySettings({
         data: {
           draw_time_jst: drawTime,
           participation_cutoff_time_jst: cutoffTime,
+          normal_base_reward_inmu: normal,
+          w_reward_inmu: w,
         },
-      }),
+      });
+    },
     onSuccess: () => {
       toast.success("抽選設定を保存しました");
       qc.invalidateQueries({ queryKey: ["lottery-settings"] });
@@ -153,6 +164,29 @@ function AdminPage() {
               />
             </label>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm">
+              <span className="block text-xs font-semibold mb-1.5 text-[oklch(0.82_0.15_88)]">通常基本報酬</span>
+              <input
+                value={normalReward}
+                onChange={(e) => setNormalReward(e.target.value.replace(/[^0-9]/g, ""))}
+                inputMode="numeric"
+                className="w-full rounded-lg bg-[oklch(0.09_0.01_40)] border border-[oklch(0.55_0.12_82/0.35)] px-3 py-2.5 outline-none"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="block text-xs font-semibold mb-1.5 text-[oklch(0.82_0.15_88)]">W当選報酬</span>
+              <input
+                value={wReward}
+                onChange={(e) => setWReward(e.target.value.replace(/[^0-9]/g, ""))}
+                inputMode="numeric"
+                className="w-full rounded-lg bg-[oklch(0.09_0.01_40)] border border-[oklch(0.55_0.12_82/0.35)] px-3 py-2.5 outline-none"
+              />
+            </label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            通常当選は「基本報酬 + 還元率」で計算、W当選は固定報酬です。
+          </p>
           <button
             onClick={() => updateSettings.mutate()}
             disabled={updateSettings.isPending}

@@ -9,6 +9,8 @@ function todayJst(): string {
 const DEFAULT_LOTTERY_SETTINGS = {
   draw_time_jst: "12:00",
   participation_cutoff_time_jst: "11:59",
+  normal_base_reward_inmu: 10000,
+  w_reward_inmu: 200000,
 };
 
 async function assertAdmin(supabase: any, userId: string) {
@@ -36,7 +38,7 @@ export const getLotterySettings = createServerFn({ method: "GET" }).handler(asyn
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await (supabaseAdmin as any)
     .from("lottery_settings")
-    .select("draw_time_jst,participation_cutoff_time_jst,updated_at")
+    .select("draw_time_jst,participation_cutoff_time_jst,normal_base_reward_inmu,w_reward_inmu,updated_at")
     .eq("id", true)
     .maybeSingle();
 
@@ -58,6 +60,8 @@ export const adminUpdateLotterySettings = createServerFn({ method: "POST" })
       .object({
         draw_time_jst: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
         participation_cutoff_time_jst: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        normal_base_reward_inmu: z.number().int().min(0).max(1000000000),
+        w_reward_inmu: z.number().int().min(0).max(1000000000),
       })
       .parse(d),
   )
@@ -68,6 +72,8 @@ export const adminUpdateLotterySettings = createServerFn({ method: "POST" })
       _admin_user_id: context.userId,
       _draw_time_jst: data.draw_time_jst,
       _participation_cutoff_time_jst: data.participation_cutoff_time_jst,
+      _normal_base_reward_inmu: data.normal_base_reward_inmu,
+      _w_reward_inmu: data.w_reward_inmu,
     });
     if (error) throw error;
     return result as Record<string, unknown>;

@@ -14,7 +14,8 @@ export function daysUntilNext810(): number {
     target = new Date(y + 1, 7, 10);
   }
   const ms = target.getTime() - todayMidnight.getTime();
-  return Math.max(0, Math.round(ms / (1000 * 60 * 60 * 24)));
+  const remainingDays = Math.max(0, Math.round(ms / (1000 * 60 * 60 * 24)));
+  return remainingDays === 0 ? 0 : remainingDays + 1;
 }
 
 export function calcRedemptionRate(count: number): number {
