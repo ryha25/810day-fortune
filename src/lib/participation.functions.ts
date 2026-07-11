@@ -274,18 +274,10 @@ export const loginWithXId = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "network_error" as const };
     }
 
-    if (data.past_participation !== undefined) {
-      const seed = await getExistingParticipantSeed(supabaseAdmin, data.x_id_normalized);
-      if (!seed) return { ok: false as const, reason: "existing_not_found" as const };
-      if (seed.participation_count !== data.past_participation) {
-        return { ok: false as const, reason: "participation_mismatch" as const };
-      }
-    }
-
     const canUseAuthToken = await hasAuthTokenColumn(supabaseAdmin);
     const { data: row, error } = await supabaseAdmin
       .from("profiles")
-      .select(canUseAuthToken ? "id,auth_token" : "id")
+      .select(canUseAuthToken ? "id,auth_token,participation_count" : "id,participation_count")
       .eq("x_id_normalized", data.x_id_normalized)
       .maybeSingle();
 
@@ -293,6 +285,21 @@ export const loginWithXId = createServerFn({ method: "POST" })
       logSupabaseError("loginWithXId.findProfile", error);
       return { ok: false as const, reason: "not_found" as const };
     }
+
+    if (data.past_participation !== undefined) {
+      if (row) {
+        if (row.participation_count !== data.past_participation) {
+          return { ok: false as const, reason: "participation_mismatch" as const };
+        }
+      } else {
+        const seed = await getExistingParticipantSeed(supabaseAdmin, data.x_id_normalized);
+        if (!seed) return { ok: false as const, reason: "existing_not_found" as const };
+        if (seed.participation_count !== data.past_participation) {
+          return { ok: false as const, reason: "participation_mismatch" as const };
+        }
+      }
+    }
+
     if (!row) {
       return { ok: false as const, reason: "not_found" as const };
     }
