@@ -91,18 +91,49 @@ function Dashboard() {
     );
   }
 
-  function openDailyPost() {
+  async function openDailyPost() {
+    if (submitting || todayStatus?.participated) return;
     const appUrl = window.location.origin;
     const text = encodeURIComponent(
       `810Dayまであと${days}日\n810Day毎日くじに参加しました\n参加はこちらから\n${appUrl}\n#810Day毎日宝くじ`,
     );
     window.open(`https://x.com/intent/post?text=${text}`, "_blank", "noopener,noreferrer");
-    setConfirmMode("daily");
+    setSubmitting(true);
+    try {
+      const res = await confirmDailyParticipation();
+      toast.success(res.daily_inserted ? "参加しました" : "本日は既に参加済みです");
+      await refreshParticipationData({
+        participation_count: res.participation_count,
+        confirm_gauge: res.confirm_gauge,
+        redemption_rate: res.redemption_rate,
+        win_count: res.win_count,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "エラー");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  function openOfficialX() {
+  async function openOfficialX() {
+    if (submitting || profile.official_follow_registered) return;
     window.open(OFFICIAL_X_URL, "_blank", "noopener,noreferrer");
-    setConfirmMode("follow");
+    setSubmitting(true);
+    try {
+      const res = await registerOfficialFollow();
+      toast.success(res.follow_first_registered ? "公式Xフォロー枠へ登録しました" : "既に登録済みです");
+      await refreshParticipationData({
+        official_follow_registered: true,
+        participation_count: res.participation_count,
+        confirm_gauge: res.confirm_gauge,
+        redemption_rate: res.redemption_rate,
+        win_count: res.win_count,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "エラー");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function confirmDaily() {
@@ -194,11 +225,13 @@ function Dashboard() {
         </header>
 
         <section className="space-y-3 mb-6">
-          <button onClick={openDailyPost} disabled={todayStatus?.participated} className="btn-gold w-full rounded-xl py-4 font-display text-lg disabled:opacity-50">
-            {todayStatus?.participated ? "本日の投稿参加済み" : "毎日参加する"}
+          <button onClick={openDailyPost} disabled={submitting || todayStatus?.participated} className="btn-gold w-full rounded-xl py-3 font-display disabled:opacity-50">
+            <span className="block text-lg">{todayStatus?.participated ? "本日の投稿参加済み" : "投稿して参加"}</span>
+            <span className="block text-xs font-sans opacity-80">{todayStatus?.participated ? "Posted today" : "Post to join"}</span>
           </button>
-          <button onClick={openOfficialX} disabled={profile.official_follow_registered} className="btn-crimson w-full rounded-xl py-4 font-display text-lg disabled:opacity-50">
-            {profile.official_follow_registered ? "公式Xフォロー枠 登録済み" : "公式Xをフォローして抽選枠を追加"}
+          <button onClick={openOfficialX} disabled={submitting || profile.official_follow_registered} className="btn-crimson w-full rounded-xl py-3 font-display disabled:opacity-50">
+            <span className="block text-lg">{profile.official_follow_registered ? "公式Xフォロー枠 登録済み" : "Xをフォローして参加"}</span>
+            <span className="block text-xs font-sans opacity-80">{profile.official_follow_registered ? "Follow slot registered" : "Follow X to join"}</span>
           </button>
         </section>
 
@@ -257,15 +290,6 @@ function Dashboard() {
           )}
         </section>
       </div>
-
-      {confirmMode && (
-        <ConfirmDialog
-          mode={confirmMode}
-          submitting={submitting}
-          onCancel={() => setConfirmMode(null)}
-          onConfirm={confirmMode === "daily" ? confirmDaily : confirmFollow}
-        />
-      )}
 
       <BottomNav />
     </main>
