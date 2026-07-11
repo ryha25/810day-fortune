@@ -6,6 +6,11 @@ function todayJst(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tokyo" });
 }
 
+const DEFAULT_LOTTERY_SETTINGS = {
+  draw_time_jst: "12:00",
+  participation_cutoff_time_jst: "11:59",
+};
+
 async function assertAdmin(supabase: any, userId: string) {
   const { data } = await supabase
     .from("user_roles")
@@ -25,6 +30,47 @@ export const verifyAdminPassword = createServerFn({ method: "POST" })
     if (!expected) return { ok: false as const, reason: "not_configured" as const };
     const ok = data.password === expected;
     return { ok, reason: ok ? null : ("invalid_password" as const) };
+  });
+
+export const getLotterySettings = createServerFn({ method: "GET" }).handler(async () => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await (supabaseAdmin as any)
+    .from("lottery_settings")
+    .select("draw_time_jst,participation_cutoff_time_jst,updated_at")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === "42P01" || error.code === "42703") return DEFAULT_LOTTERY_SETTINGS;
+    throw error;
+  }
+
+  return {
+    ...DEFAULT_LOTTERY_SETTINGS,
+    ...(data ?? {}),
+  };
+});
+
+export const adminUpdateLotterySettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        draw_time_jst: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        participation_cutoff_time_jst: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: result, error } = await (supabaseAdmin as any).rpc("update_lottery_settings", {
+      _admin_user_id: context.userId,
+      _draw_time_jst: data.draw_time_jst,
+      _participation_cutoff_time_jst: data.participation_cutoff_time_jst,
+    });
+    if (error) throw error;
+    return result as Record<string, unknown>;
   });
 
 export const listRecentDraws = createServerFn({ method: "GET" })

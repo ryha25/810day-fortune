@@ -8,7 +8,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { useProfile } from "@/hooks/useProfile";
 import { daysUntilNext810 } from "@/lib/date-jst";
 import { checkTodayParticipation, confirmDailyParticipation, registerOfficialFollow } from "@/lib/participation.functions";
-import { getTodayDrawForMe, markDrawSeen } from "@/lib/draw.functions";
+import { getLotterySettings, getTodayDrawForMe, markDrawSeen } from "@/lib/draw.functions";
 
 const OFFICIAL_X_URL = "https://x.com/inmucoin?s=21&t=qie9_vjU0QmQ2J90th9B-Q";
 const DISCORD_NOTE = "※Discord加入分は確認後反映します。";
@@ -40,6 +40,10 @@ function Dashboard() {
     queryKey: ["today-draw-for-me"],
     queryFn: () => getTodayDrawForMe(),
     refetchInterval: 60_000,
+  });
+  const { data: lotterySettings } = useQuery({
+    queryKey: ["lottery-settings"],
+    queryFn: () => getLotterySettings(),
   });
 
   const myWin = todayDraw?.myWin;
@@ -179,6 +183,14 @@ function Dashboard() {
             <span className="mx-1.5 font-display text-3xl text-gold-gradient">{days}</span>
             <span className="text-muted-foreground">日</span>
           </p>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+            <div className="rounded-lg border border-[oklch(0.55_0.12_82/0.25)] py-2">
+              参加締切 {lotterySettings?.participation_cutoff_time_jst ?? "11:59"} JST
+            </div>
+            <div className="rounded-lg border border-[oklch(0.55_0.12_82/0.25)] py-2">
+              抽選 {lotterySettings?.draw_time_jst ?? "12:00"} JST
+            </div>
+          </div>
         </header>
 
         <section className="space-y-3 mb-6">

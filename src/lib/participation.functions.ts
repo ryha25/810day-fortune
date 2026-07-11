@@ -102,6 +102,9 @@ export const confirmDailyParticipation = createServerFn({ method: "POST" })
       logSupabaseError("confirmDailyParticipation.recordDailyPostParticipation", error);
       throw error;
     }
+    if (data?.ok === false && data.reason === "cutoff_passed") {
+      throw new Error(`参加締切を過ぎています（${String(data.cutoff_time_jst).slice(0, 5)} JST）`);
+    }
     return data as {
       ok: true;
       daily_participated: true;

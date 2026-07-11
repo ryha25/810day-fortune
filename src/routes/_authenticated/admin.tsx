@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Play, RotateCcw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { BottomNav } from "@/components/BottomNav";
@@ -12,7 +12,9 @@ import {
   adminListWinners,
   adminRunTestDraw,
   adminTodayEligible,
+  adminUpdateLotterySettings,
   adminUpdateParticipantStats,
+  getLotterySettings,
   listRecentDraws,
 } from "@/lib/draw.functions";
 
@@ -42,6 +44,8 @@ function AdminPage() {
   const [todayOnly, setTodayOnly] = useState(false);
   const [followOnly, setFollowOnly] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
+  const [drawTime, setDrawTime] = useState("12:00");
+  const [cutoffTime, setCutoffTime] = useState("11:59");
 
   const { data: eligible, refetch: refetchEligible } = useQuery({
     queryKey: ["admin-eligible"],
@@ -58,6 +62,31 @@ function AdminPage() {
   const { data: participantData, refetch: refetchParticipants } = useQuery({
     queryKey: ["admin-participants", q, sort, todayOnly, followOnly],
     queryFn: () => adminListParticipants({ data: { q, sort, todayOnly, followOnly } }),
+  });
+  const { data: lotterySettings } = useQuery({
+    queryKey: ["lottery-settings"],
+    queryFn: () => getLotterySettings(),
+  });
+
+  useEffect(() => {
+    if (!lotterySettings) return;
+    setDrawTime((lotterySettings.draw_time_jst ?? "12:00").slice(0, 5));
+    setCutoffTime((lotterySettings.participation_cutoff_time_jst ?? "11:59").slice(0, 5));
+  }, [lotterySettings]);
+
+  const updateSettings = useMutation({
+    mutationFn: () =>
+      adminUpdateLotterySettings({
+        data: {
+          draw_time_jst: drawTime,
+          participation_cutoff_time_jst: cutoffTime,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("抽選設定を保存しました");
+      qc.invalidateQueries({ queryKey: ["lottery-settings"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "抽選設定の保存に失敗しました"),
   });
 
   const runTest = useMutation({
@@ -100,6 +129,38 @@ function AdminPage() {
             更新
           </button>
         </div>
+
+        <section className="card-luxe rounded-2xl p-5 space-y-3">
+          <h2 className="font-display text-xl text-gold-gradient">抽選設定</h2>
+          <p className="text-xs text-muted-foreground">時間はすべてJST基準です。</p>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm">
+              <span className="block text-xs font-semibold mb-1.5 text-[oklch(0.82_0.15_88)]">抽選時間</span>
+              <input
+                type="time"
+                value={drawTime}
+                onChange={(e) => setDrawTime(e.target.value)}
+                className="w-full rounded-lg bg-[oklch(0.09_0.01_40)] border border-[oklch(0.55_0.12_82/0.35)] px-3 py-2.5 outline-none"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="block text-xs font-semibold mb-1.5 text-[oklch(0.82_0.15_88)]">参加締切</span>
+              <input
+                type="time"
+                value={cutoffTime}
+                onChange={(e) => setCutoffTime(e.target.value)}
+                className="w-full rounded-lg bg-[oklch(0.09_0.01_40)] border border-[oklch(0.55_0.12_82/0.35)] px-3 py-2.5 outline-none"
+              />
+            </label>
+          </div>
+          <button
+            onClick={() => updateSettings.mutate()}
+            disabled={updateSettings.isPending}
+            className="btn-gold w-full rounded-lg py-3 font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            <Save className="h-4 w-4" /> 保存
+          </button>
+        </section>
 
         <section className="card-luxe rounded-2xl p-5">
           <h2 className="font-display text-xl text-gold-gradient mb-3">当日の抽選対象者</h2>
