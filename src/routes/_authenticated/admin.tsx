@@ -8,6 +8,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { supabase } from "@/integrations/supabase/client";
 import {
   adminCancelTestDraw,
+  adminDeleteParticipant,
   adminListParticipants,
   adminListWinners,
   adminRunTestDraw,
@@ -366,6 +367,23 @@ function EditDialog({ user, onClose, onSaved }: { user: any; onClose: () => void
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "保存に失敗しました"),
   });
+  const deleteParticipant = useMutation({
+    mutationFn: () => adminDeleteParticipant({ data: { user_id: user.id } }),
+    onSuccess: (res: any) => {
+      if (res?.ok) {
+        toast.success(`@${res.deleted_x_id ?? user.x_id_normalized} を削除しました`);
+        refreshAdmin(qc);
+        onSaved();
+        onClose();
+        return;
+      }
+      if (res?.reason === "self_delete_blocked") return toast.error("ログイン中の管理者アカウントは削除できません");
+      if (res?.reason === "admin_delete_blocked") return toast.error("管理者アカウントは削除できません");
+      if (res?.reason === "not_found") return toast.error("対象ユーザーが見つかりません");
+      toast.error("削除できませんでした");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "削除に失敗しました"),
+  });
 
   function autoRate(nextParticipation: string) {
     setParticipationCount(nextParticipation);
@@ -392,6 +410,11 @@ function EditDialog({ user, onClose, onSaved }: { user: any; onClose: () => void
     updateStats.mutate(payload);
   }
 
+  function remove() {
+    if (!window.confirm(`@${user.x_id_normalized} を削除しますか？\nログイン情報、参加記録、当選者データも削除されます。`)) return;
+    deleteParticipant.mutate();
+  }
+
   return (
     <div role="dialog" className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div className="card-luxe rounded-2xl p-6 w-full max-w-sm space-y-4" onClick={(e) => e.stopPropagation()}>
@@ -403,7 +426,14 @@ function EditDialog({ user, onClose, onSaved }: { user: any; onClose: () => void
         <button onClick={save} disabled={updateStats.isPending} className="btn-gold w-full rounded-lg py-3 font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-60">
           <Save className="h-4 w-4" /> 保存
         </button>
-        <button onClick={onClose} disabled={updateStats.isPending} className="w-full rounded-lg py-2.5 text-sm text-muted-foreground">キャンセル</button>
+        <button
+          onClick={remove}
+          disabled={updateStats.isPending || deleteParticipant.isPending}
+          className="w-full rounded-lg py-2.5 text-sm border border-red-500/40 text-red-300 disabled:opacity-60"
+        >
+          ユーザー削除
+        </button>
+        <button onClick={onClose} disabled={updateStats.isPending || deleteParticipant.isPending} className="w-full rounded-lg py-2.5 text-sm text-muted-foreground">キャンセル</button>
       </div>
     </div>
   );

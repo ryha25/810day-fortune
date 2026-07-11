@@ -389,6 +389,51 @@ export const adminUpdateParticipantStats = createServerFn({ method: "POST" })
     return result as { ok: true };
   });
 
+export const adminDeleteParticipant = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ user_id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    if (data.user_id === context.userId) {
+      return { ok: false as const, reason: "self_delete_blocked" as const };
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: targetRole, error: roleErr } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", data.user_id)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (roleErr) throw roleErr;
+    if (targetRole) return { ok: false as const, reason: "admin_delete_blocked" as const };
+
+    const { data: profile, error: profileErr } = await supabaseAdmin
+      .from("profiles")
+      .select("id,x_id_normalized")
+      .eq("id", data.user_id)
+      .maybeSingle();
+    if (profileErr) throw profileErr;
+    if (!profile) return { ok: false as const, reason: "not_found" as const };
+
+    const { error: dailyDrawErr } = await supabaseAdmin
+      .from("lottery_draws")
+      .update({ daily_winner_user_id: null })
+      .eq("daily_winner_user_id", data.user_id);
+    if (dailyDrawErr) throw dailyDrawErr;
+
+    const { error: followDrawErr } = await supabaseAdmin
+      .from("lottery_draws")
+      .update({ follow_winner_user_id: null })
+      .eq("follow_winner_user_id", data.user_id);
+    if (followDrawErr) throw followDrawErr;
+
+    const { error: deleteAuthErr } = await supabaseAdmin.auth.admin.deleteUser(data.user_id);
+    if (deleteAuthErr) throw deleteAuthErr;
+
+    return { ok: true as const, deleted_x_id: profile.x_id_normalized as string };
+  });
+
 export const adminRunTestDraw = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
