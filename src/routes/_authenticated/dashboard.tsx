@@ -53,7 +53,10 @@ function Dashboard() {
     };
   }, [todayDraw?.winners]);
 
-  async function refreshParticipationData() {
+  async function refreshParticipationData(nextProfile?: Partial<typeof profile>) {
+    if (nextProfile) {
+      qc.setQueryData(["profile", "self"], (current: any) => (current ? { ...current, ...nextProfile } : current));
+    }
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["today-participation"] }),
       qc.invalidateQueries({ queryKey: ["today-draw-for-me"] }),
@@ -61,6 +64,7 @@ function Dashboard() {
       qc.invalidateQueries({ queryKey: ["admin-eligible"] }),
       qc.invalidateQueries({ queryKey: ["admin-participants"] }),
     ]);
+    await qc.refetchQueries({ queryKey: ["profile", "self"] });
   }
 
   if (isLoading || !profile) {
@@ -91,7 +95,12 @@ function Dashboard() {
     try {
       const res = await confirmDailyParticipation();
       toast.success(res.daily_inserted ? "参加を確定しました" : "本日は既に参加済みです");
-      await refreshParticipationData();
+      await refreshParticipationData({
+        participation_count: res.participation_count,
+        confirm_gauge: res.confirm_gauge,
+        redemption_rate: res.redemption_rate,
+        win_count: res.win_count,
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "エラー");
     } finally {
@@ -106,7 +115,13 @@ function Dashboard() {
     try {
       const res = await registerOfficialFollow();
       toast.success(res.follow_first_registered ? "公式Xフォロー枠へ登録しました" : "既に登録済みです");
-      await refreshParticipationData();
+      await refreshParticipationData({
+        official_follow_registered: true,
+        participation_count: res.participation_count,
+        confirm_gauge: res.confirm_gauge,
+        redemption_rate: res.redemption_rate,
+        win_count: res.win_count,
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "エラー");
     } finally {

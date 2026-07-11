@@ -44,6 +44,12 @@ async function hasProfileColumn(supabaseAdmin: any, column: string): Promise<boo
   return !(error.code === "42703" || new RegExp(column, "i").test(error.message ?? ""));
 }
 
+async function hasTable(supabaseAdmin: any, table: string): Promise<boolean> {
+  const { error } = await supabaseAdmin.from(table).select("*").limit(1);
+  if (!error) return true;
+  return !(error.code === "42P01" || new RegExp(table, "i").test(error.message ?? ""));
+}
+
 async function ensureAdminRoleForKnownAccount(supabaseAdmin: any, userId: string, xId: string) {
   if (xId !== "ryuyah25") return;
   const { error } = await supabaseAdmin
@@ -94,20 +100,68 @@ export const confirmDailyParticipation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await (supabaseAdmin as any).rpc("record_daily_post_participation", {
-      _user_id: context.userId,
-      _participation_date: todayJst(),
+    const date = todayJst();
+    const canUseStatDays = await hasTable(supabaseAdmin, "participation_stat_days");
+    const { error: insertErr } = await supabaseAdmin.from("daily_participations").insert({
+      user_id: context.userId,
+      participation_date: date,
     });
-    if (error) throw error;
-    return data as {
-      ok: true;
-      daily_participated: true;
-      daily_inserted: boolean;
-      participation_count: number;
-      confirm_gauge: number;
-      redemption_rate: number;
-      win_count: number;
-      participation_date: string;
+    if (insertErr && insertErr.code !== "23505") {
+      logSupabaseError("confirmDailyParticipation.insertDailyParticipation", insertErr);
+      throw insertErr;
+    }
+
+    const dailyInserted = !insertErr;
+    let shouldIncrementCount = dailyInserted;
+    if (canUseStatDays) {
+      const { error: statErr } = await supabaseAdmin.from("participation_stat_days").insert({
+        user_id: context.userId,
+        participation_date: date,
+        source: "daily",
+      });
+      if (statErr && statErr.code !== "23505") {
+        logSupabaseError("confirmDailyParticipation.insertParticipationStatDay", statErr);
+        throw statErr;
+      }
+      shouldIncrementCount = !statErr;
+    }
+
+    if (shouldIncrementCount) {
+      const { data: profileBefore, error: readErr } = await supabaseAdmin
+        .from("profiles")
+        .select("participation_count")
+        .eq("id", context.userId)
+        .single();
+      if (readErr) throw readErr;
+      const { error: countErr } = await supabaseAdmin
+        .from("profiles")
+        .update({
+          participation_count: (profileBefore.participation_count ?? 0) + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", context.userId);
+      if (countErr) {
+        logSupabaseError("confirmDailyParticipation.incrementParticipationCount", countErr);
+        throw countErr;
+      }
+    }
+
+    const { data: profile, error: profileErr } = await supabaseAdmin
+      .from("profiles")
+      .select("participation_count,confirm_gauge,redemption_rate,win_count")
+      .eq("id", context.userId)
+      .single();
+    if (profileErr) throw profileErr;
+
+    return {
+      ok: true as const,
+      daily_participated: true as const,
+      daily_inserted: dailyInserted,
+      participation_count: profile.participation_count,
+      confirm_gauge: profile.confirm_gauge,
+      redemption_rate: profile.redemption_rate,
+      win_count: profile.win_count,
+      participation_date: date,
     };
   });
 
@@ -115,20 +169,39 @@ export const registerOfficialFollow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await (supabaseAdmin as any).rpc("register_official_follow_participation", {
-      _user_id: context.userId,
-      _participation_date: todayJst(),
-    });
-    if (error) throw error;
-    return data as {
-      ok: true;
-      official_follow_registered: true;
-      follow_first_registered: boolean;
-      participation_count: number;
-      confirm_gauge: number;
-      redemption_rate: number;
-      win_count: number;
-      participation_date: string;
+    const hasRegisteredAt = await hasProfileColumn(supabaseAdmin, "official_follow_registered_at");
+    const { data: before, error: beforeErr } = await supabaseAdmin
+      .from("profiles")
+      .select("official_follow_registered")
+      .eq("id", context.userId)
+      .single();
+    if (beforeErr) throw beforeErr;
+
+    const updatePayload = {
+      official_follow_registered: true,
+      ...(hasRegisteredAt && !before.official_follow_registered ? { official_follow_registered_at: new Date().toISOString() } : {}),
+      updated_at: new Date().toISOString(),
+    };
+    const { data: profile, error: updateErr } = await supabaseAdmin
+      .from("profiles")
+      .update(updatePayload)
+      .eq("id", context.userId)
+      .select("participation_count,confirm_gauge,redemption_rate,win_count")
+      .single();
+    if (updateErr) {
+      logSupabaseError("registerOfficialFollow.updateProfile", updateErr);
+      throw updateErr;
+    }
+
+    return {
+      ok: true as const,
+      official_follow_registered: true as const,
+      follow_first_registered: !before.official_follow_registered,
+      participation_count: profile.participation_count,
+      confirm_gauge: profile.confirm_gauge,
+      redemption_rate: profile.redemption_rate,
+      win_count: profile.win_count,
+      participation_date: todayJst(),
     };
   });
 
