@@ -40,6 +40,7 @@ function registerErrorMessage(res: { reason?: string }) {
 function loginErrorMessage(res: { reason?: string }) {
   if (res.reason === "existing_not_found") return "既存参加者データにこのX IDが見つかりません。";
   if (res.reason === "participation_mismatch") return "X IDと参加回数が一致しません。";
+  if (res.reason === "existing_initial_required") return "既存ユーザーからX IDと参加回数で初回ログインしてください。";
   if (res.reason === "not_found") return "このX IDは未登録です。";
   if (res.reason === "password_required") return "パスワードを入力してください。";
   if (res.reason === "admin_password_not_configured") return "管理者パスワードが設定されていません。";

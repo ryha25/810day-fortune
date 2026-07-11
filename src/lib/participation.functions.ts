@@ -278,9 +278,17 @@ export const loginWithXId = createServerFn({ method: "POST" })
     }
 
     const canUseAuthToken = await hasAuthTokenColumn(supabaseAdmin);
+    const hasInitialLoginRequired = await hasProfileColumn(supabaseAdmin, "initial_login_required");
     const { data: row, error } = await supabaseAdmin
       .from("profiles")
-      .select(canUseAuthToken ? "id,auth_token,participation_count" : "id,participation_count")
+      .select(
+        [
+          "id",
+          "participation_count",
+          ...(canUseAuthToken ? ["auth_token"] : []),
+          ...(hasInitialLoginRequired ? ["initial_login_required"] : []),
+        ].join(","),
+      )
       .eq("x_id_normalized", data.x_id_normalized)
       .maybeSingle();
 
@@ -307,6 +315,10 @@ export const loginWithXId = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "not_found" as const };
     }
 
+    if (hasInitialLoginRequired && row.initial_login_required && data.past_participation === undefined) {
+      return { ok: false as const, reason: "existing_initial_required" as const };
+    }
+
     const adminPassword = process.env.ADMIN_PASSWORD;
     const isAdminPasswordLogin =
       !!data.password &&
@@ -320,6 +332,27 @@ export const loginWithXId = createServerFn({ method: "POST" })
 
     const defaultPassword = canUseAuthToken && row.auth_token ? row.auth_token : xIdToPassword(data.x_id_normalized);
     let password = data.password || defaultPassword;
+    if (hasInitialLoginRequired && row.initial_login_required && data.past_participation !== undefined) {
+      const { randomUUID } = await import("node:crypto");
+      const nextPassword = canUseAuthToken ? randomUUID() : xIdToPassword(data.x_id_normalized);
+      const { error: resetPasswordErr } = await supabaseAdmin.auth.admin.updateUserById(row.id, {
+        password: nextPassword,
+      });
+      if (resetPasswordErr) {
+        logSupabaseError("loginWithXId.resetExistingInitialPassword", resetPasswordErr);
+        return { ok: false as const, reason: "auth_failed" as const };
+      }
+      const updatePayload = {
+        initial_login_required: false,
+        ...(canUseAuthToken ? { auth_token: nextPassword } : {}),
+      };
+      const { error: resetProfileErr } = await (supabaseAdmin as any).from("profiles").update(updatePayload).eq("id", row.id);
+      if (resetProfileErr) {
+        logSupabaseError("loginWithXId.clearInitialLoginRequired", resetProfileErr);
+        return { ok: false as const, reason: "auth_failed" as const };
+      }
+      password = nextPassword;
+    }
     if (isAdminPasswordLogin) {
       const { error: updatePasswordErr } = await supabaseAdmin.auth.admin.updateUserById(row.id, {
         password: adminPassword,
