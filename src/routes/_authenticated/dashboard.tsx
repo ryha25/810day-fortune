@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, History, Share2, Sparkles, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { BottomNav } from "@/components/BottomNav";
@@ -29,6 +29,7 @@ function Dashboard() {
   const [confirmMode, setConfirmMode] = useState<null | "daily" | "follow">(null);
   const [submitting, setSubmitting] = useState(false);
   const [confirmingResult, setConfirmingResult] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
   const days = daysUntilNext810();
 
   const { data: todayStatus } = useQuery({
@@ -44,6 +45,16 @@ function Dashboard() {
   const myWin = todayDraw?.myWin;
   const shouldCelebrate = !!myWin && !todayDraw?.resultConfirmed;
   const isTestDraw = !!todayDraw?.isTest;
+
+  useEffect(() => {
+    if (!shouldCelebrate) {
+      setShowCelebration(false);
+      return;
+    }
+    setShowCelebration(true);
+    const timer = window.setTimeout(() => setShowCelebration(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [shouldCelebrate, todayDraw?.draw?.id, myWin?.slot, myWin?.kind]);
 
   const winnersBySlot = useMemo(() => {
     const winners = todayDraw?.winners ?? [];
@@ -159,7 +170,7 @@ function Dashboard() {
 
   return (
     <main className="min-h-screen bg-luxe pb-28">
-      {shouldCelebrate && <Celebration kind={myWin.kind} />}
+      {showCelebration && myWin && <Celebration kind={myWin.kind} />}
       <div className="mx-auto max-w-md px-4 pt-8">
         <header className="text-center mb-6">
           <h1 className="font-display text-4xl text-gold-gradient">810Day毎日くじ</h1>
