@@ -108,15 +108,39 @@ function ProfilePage() {
 
   async function enablePushNotifications() {
     if (pushSaving) return;
+    const isEmbeddedPreview = (() => {
+      try {
+        return window.self !== window.top;
+      } catch {
+        return true;
+      }
+    })();
+
+    if (isEmbeddedPreview) {
+      toast.error("埋め込みPreviewでは通知を許可できません。New tabまたは公開URLで開いてください。");
+      return;
+    }
+
+    if (!window.isSecureContext) {
+      toast.error("通知はHTTPSの公開URLでのみ許可できます。公開URLから開いてください。");
+      return;
+    }
+
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
       toast.error("このブラウザはプッシュ通知に対応していません。");
+      return;
+    }
+
+    if (Notification.permission === "denied") {
+      toast.error("ブラウザ側で通知がブロックされています。URL左の鍵アイコンから通知を許可してください。");
       return;
     }
 
     setPushSaving(true);
     try {
       const { publicKey, enabled } = await getPushPublicKey();
-      if (!enabled || !publicKey) {
+      const cleanPublicKey = publicKey.trim();
+      if (!enabled || !cleanPublicKey) {
         toast.error("通知設定がまだ完了していません。管理者側でVAPIDキーを設定してください。");
         return;
       }
@@ -127,18 +151,23 @@ function ProfilePage() {
         return;
       }
 
-      const registration = await navigator.serviceWorker.register("/push-sw.js");
+      await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
+      const registration = await navigator.serviceWorker.ready;
       const existing = await registration.pushManager.getSubscription();
       const subscription =
         existing ??
         (await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
+          applicationServerKey: urlBase64ToUint8Array(cleanPublicKey),
         }));
+      const subscriptionPayload = subscription.toJSON();
+      if (!subscriptionPayload.endpoint || !subscriptionPayload.keys?.p256dh || !subscriptionPayload.keys?.auth) {
+        throw new Error("通知購読情報を取得できませんでした。ページを再読み込みして再度お試しください。");
+      }
 
       await savePushSubscription({
         data: {
-          subscription: subscription.toJSON() as any,
+          subscription: subscriptionPayload as any,
           user_agent: navigator.userAgent,
         },
       });

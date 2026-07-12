@@ -12,9 +12,16 @@ const subscriptionSchema = z.object({
 });
 
 export const getPushPublicKey = createServerFn({ method: "GET" }).handler(async () => {
+  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim() ?? "";
+  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim() ?? "";
+
   return {
-    publicKey: process.env.VAPID_PUBLIC_KEY ?? "",
-    enabled: !!process.env.VAPID_PUBLIC_KEY && !!process.env.VAPID_PRIVATE_KEY,
+    publicKey,
+    enabled: !!publicKey && !!privateKey,
+    missing: [
+      !publicKey ? "VAPID_PUBLIC_KEY" : null,
+      !privateKey ? "VAPID_PRIVATE_KEY" : null,
+    ].filter(Boolean),
   };
 });
 
