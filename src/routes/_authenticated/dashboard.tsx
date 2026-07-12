@@ -184,7 +184,17 @@ function Dashboard() {
       const res = await markDrawSeen({ data: { draw_id: todayDraw.draw.id } });
       if (res.ok) toast.success(res.already_confirmed ? "確認済みです" : "抽選結果を確認しました");
       else toast.error("抽選結果の確認に失敗しました");
-      await refreshParticipationData();
+      const result = res as any;
+      await refreshParticipationData(
+        result.ok
+          ? {
+              participation_count: result.participation_count ?? profile.participation_count,
+              confirm_gauge: result.confirm_gauge ?? profile.confirm_gauge,
+              redemption_rate: result.redemption_rate ?? profile.redemption_rate,
+              win_count: result.win_count ?? profile.win_count,
+            }
+          : undefined,
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "エラー");
     } finally {

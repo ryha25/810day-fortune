@@ -62,6 +62,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "810Day Daily Lottery" },
+      { name: "theme-color", content: "#f5b700" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: "810Dayくじ" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       {
         name: "description",
         content: "A daily lottery app for 810Day.",
@@ -78,6 +82,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
+      { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "icon", href: "/app-icon.png", type: "image/png" },
       { rel: "apple-touch-icon", href: "/app-icon.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },

@@ -1,0 +1,19 @@
+{
+  "name": "810Day毎日くじ",
+  "short_name": "810Dayくじ",
+  "description": "810Day毎日くじ",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#090101",
+  "theme_color": "#f5b700",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

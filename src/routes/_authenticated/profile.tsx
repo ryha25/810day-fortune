@@ -136,6 +136,12 @@ function ProfilePage() {
       return;
     }
 
+    const initialPermission = await Notification.requestPermission();
+    if (initialPermission !== "granted") {
+      toast.error("通知が許可されませんでした。");
+      return;
+    }
+
     setPushSaving(true);
     try {
       const { publicKey, enabled } = await getPushPublicKey();
