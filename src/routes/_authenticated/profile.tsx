@@ -137,7 +137,8 @@ function ProfilePage() {
     }
 
     const initialPermission = await Notification.requestPermission();
-    if (initialPermission !== "granted") {
+    const permissionAlreadyGranted = initialPermission === "granted";
+    if (!permissionAlreadyGranted) {
       toast.error("通知が許可されませんでした。");
       return;
     }
@@ -151,7 +152,7 @@ function ProfilePage() {
         return;
       }
 
-      const permission = await Notification.requestPermission();
+      const permission = permissionAlreadyGranted ? "granted" : await Notification.requestPermission();
       if (permission !== "granted") {
         toast.error("通知が許可されませんでした。");
         return;
