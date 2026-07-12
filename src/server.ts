@@ -2,9 +2,18 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { startPushNotificationScheduler } from "./lib/push-notification-scheduler.server";
 
-startPushNotificationScheduler();
+void startOptionalPushNotificationScheduler();
+
+async function startOptionalPushNotificationScheduler() {
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
+  try {
+    const { startPushNotificationScheduler } = await import("./lib/push-notification-scheduler.server");
+    startPushNotificationScheduler();
+  } catch (error) {
+    console.error("[push] scheduler disabled", error);
+  }
+}
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
