@@ -1,7 +1,7 @@
 import * as webpush from "web-push";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-type PushEventType = "cutoff_10min" | "cutoff_closed" | "draw_result";
+type PushEventType = "new_day" | "cutoff_10min" | "cutoff_closed" | "draw_result";
 
 const POLL_INTERVAL_MS = 60_000;
 const WINDOW_MS = 90_000;
@@ -34,8 +34,17 @@ async function runOnce() {
     const now = new Date();
     const date = jstDate(now);
     const settings = await getLotterySettings();
+    const newDayAt = jstDateTime(date, "00:00");
     const cutoffAt = jstDateTime(date, settings.participation_cutoff_time_jst ?? "11:59");
     const tenMinBeforeCutoff = new Date(cutoffAt.getTime() - 10 * 60_000);
+
+    if (isWithinWindow(now, newDayAt)) {
+      await sendEventOnce("new_day", date, newDayAt, {
+        title: TITLE,
+        body: "日付が変わりました。本日の810Day毎日くじに参加できます。",
+        url: "/dashboard",
+      });
+    }
 
     if (isWithinWindow(now, tenMinBeforeCutoff)) {
       await sendEventOnce("cutoff_10min", date, tenMinBeforeCutoff, {
