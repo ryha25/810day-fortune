@@ -151,6 +151,7 @@ export const checkTodayParticipation = createServerFn({ method: "GET" })
       .select("id")
       .eq("user_id", context.userId)
       .eq("participation_date", date)
+      .eq("daily_post_participated", true)
       .maybeSingle();
     return { participated: !!data, date };
   });

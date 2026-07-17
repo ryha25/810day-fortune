@@ -16,21 +16,36 @@ export type Database = {
     Tables: {
       daily_participations: {
         Row: {
+          confirm_gauge_incremented: boolean
           created_at: string
+          daily_post_participated: boolean
           id: string
+          official_follow_participated: boolean
           participation_date: string
+          participation_count_incremented: boolean
+          result_confirmed: boolean
           user_id: string
         }
         Insert: {
+          confirm_gauge_incremented?: boolean
           created_at?: string
+          daily_post_participated?: boolean
           id?: string
+          official_follow_participated?: boolean
           participation_date: string
+          participation_count_incremented?: boolean
+          result_confirmed?: boolean
           user_id: string
         }
         Update: {
+          confirm_gauge_incremented?: boolean
           created_at?: string
+          daily_post_participated?: boolean
           id?: string
+          official_follow_participated?: boolean
           participation_date?: string
+          participation_count_incremented?: boolean
+          result_confirmed?: boolean
           user_id?: string
         }
         Relationships: []
@@ -359,6 +374,10 @@ export type Database = {
       }
       record_daily_post_participation: {
         Args: { _participation_date?: string | null; _user_id: string }
+        Returns: Json
+      }
+      record_official_follow_auto_participations: {
+        Args: { _participation_date?: string | null }
         Returns: Json
       }
       register_official_follow_participation: {

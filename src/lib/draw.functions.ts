@@ -268,18 +268,22 @@ export const adminTodayEligible = createServerFn({ method: "GET" })
     await assertAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const date = todayJst();
+    await (supabaseAdmin as any).rpc("record_official_follow_auto_participations", {
+      _participation_date: date,
+    });
 
     const { data: dailyRows, error: dailyErr } = await supabaseAdmin
       .from("daily_participations")
       .select("user_id, profiles!inner(x_id_display,x_id_normalized,confirm_gauge,redemption_rate)")
-      .eq("participation_date", date);
+      .eq("participation_date", date)
+      .eq("daily_post_participated", true);
     if (dailyErr) throw dailyErr;
 
     const { data: followRows, error: followErr } = await supabaseAdmin
-      .from("profiles")
-      .select("id,x_id_display,x_id_normalized,confirm_gauge,redemption_rate")
-      .eq("official_follow_registered", true)
-      .order("x_id_normalized", { ascending: true });
+      .from("daily_participations")
+      .select("user_id, profiles!inner(x_id_display,x_id_normalized,confirm_gauge,redemption_rate)")
+      .eq("participation_date", date)
+      .eq("official_follow_participated", true);
     if (followErr) throw followErr;
 
     const daily = (dailyRows ?? []).map((r: any) => ({
@@ -290,7 +294,15 @@ export const adminTodayEligible = createServerFn({ method: "GET" })
       redemption_rate: r.profiles.redemption_rate,
     }));
 
-    return { date, daily, follow: followRows ?? [] };
+    const follow = (followRows ?? []).map((r: any) => ({
+      id: r.user_id,
+      x_id_display: r.profiles.x_id_display,
+      x_id_normalized: r.profiles.x_id_normalized,
+      confirm_gauge: r.profiles.confirm_gauge,
+      redemption_rate: r.profiles.redemption_rate,
+    }));
+
+    return { date, daily, follow };
   });
 
 export const adminListWinners = createServerFn({ method: "GET" })
@@ -341,7 +353,12 @@ export const adminListParticipants = createServerFn({ method: "POST" })
 
     const [{ data: todayRows, error: todayErr }, { data: existingRows, error: existingErr }] = await Promise.all([
       userIds.length
-        ? supabaseAdmin.from("daily_participations").select("user_id").eq("participation_date", date).in("user_id", userIds)
+        ? supabaseAdmin
+            .from("daily_participations")
+            .select("user_id")
+            .eq("participation_date", date)
+            .eq("daily_post_participated", true)
+            .in("user_id", userIds)
         : { data: [], error: null },
       supabaseAdmin.from("existing_participants").select("x_id_normalized"),
     ]);

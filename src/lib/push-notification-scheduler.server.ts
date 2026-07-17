@@ -21,18 +21,21 @@ export function startPushNotificationScheduler() {
 
 async function runOnce() {
   if (running) return;
-  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
 
   running = true;
   try {
+    const now = new Date();
+    const date = jstDate(now);
+    await recordOfficialFollowAutoParticipations(date);
+
+    if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
+
     webpush.setVapidDetails(
       process.env.VAPID_SUBJECT || "mailto:admin@810day.local",
       process.env.VAPID_PUBLIC_KEY,
       process.env.VAPID_PRIVATE_KEY,
     );
 
-    const now = new Date();
-    const date = jstDate(now);
     const settings = await getLotterySettings();
     const newDayAt = jstDateTime(date, "00:00");
     const cutoffAt = jstDateTime(date, settings.participation_cutoff_time_jst ?? "11:59");
@@ -74,6 +77,16 @@ async function runOnce() {
     console.error("[push] scheduler failed", error);
   } finally {
     running = false;
+  }
+}
+
+async function recordOfficialFollowAutoParticipations(date: string) {
+  const { error } = await (supabaseAdmin as any).rpc("record_official_follow_auto_participations", {
+    _participation_date: date,
+  });
+  if (error) {
+    if (error.code === "42883" || error.code === "42P01" || error.code === "42703") return;
+    throw error;
   }
 }
 
