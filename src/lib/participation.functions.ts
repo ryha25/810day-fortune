@@ -148,12 +148,11 @@ export const checkTodayParticipation = createServerFn({ method: "GET" })
     const date = todayJst();
     const { data } = await supabaseAdmin
       .from("daily_participations")
-      .select("id")
+      .select("daily_post_participated_at")
       .eq("user_id", context.userId)
       .eq("participation_date", date)
-      .eq("daily_post_participated", true)
       .maybeSingle();
-    return { participated: !!data, date };
+    return { participated: !!data?.daily_post_participated_at, date };
   });
 
 export const registerNewUser = createServerFn({ method: "POST" })

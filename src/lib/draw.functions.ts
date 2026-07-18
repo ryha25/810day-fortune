@@ -357,7 +357,7 @@ export const adminListParticipants = createServerFn({ method: "POST" })
             .from("daily_participations")
             .select("user_id")
             .eq("participation_date", date)
-            .eq("daily_post_participated", true)
+            .not("daily_post_participated_at", "is", null)
             .in("user_id", userIds)
         : { data: [], error: null },
       supabaseAdmin.from("existing_participants").select("x_id_normalized"),

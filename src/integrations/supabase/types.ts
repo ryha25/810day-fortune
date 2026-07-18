@@ -19,8 +19,10 @@ export type Database = {
           confirm_gauge_incremented: boolean
           created_at: string
           daily_post_participated: boolean
+          daily_post_participated_at: string | null
           id: string
           official_follow_participated: boolean
+          official_follow_participated_at: string | null
           participation_date: string
           participation_count_incremented: boolean
           result_confirmed: boolean
@@ -30,8 +32,10 @@ export type Database = {
           confirm_gauge_incremented?: boolean
           created_at?: string
           daily_post_participated?: boolean
+          daily_post_participated_at?: string | null
           id?: string
           official_follow_participated?: boolean
+          official_follow_participated_at?: string | null
           participation_date: string
           participation_count_incremented?: boolean
           result_confirmed?: boolean
@@ -41,8 +45,10 @@ export type Database = {
           confirm_gauge_incremented?: boolean
           created_at?: string
           daily_post_participated?: boolean
+          daily_post_participated_at?: string | null
           id?: string
           official_follow_participated?: boolean
+          official_follow_participated_at?: string | null
           participation_date?: string
           participation_count_incremented?: boolean
           result_confirmed?: boolean
