@@ -10,6 +10,7 @@ import {
   adminCancelTestDraw,
   adminDeleteParticipant,
   adminGetPlannedDraw,
+  adminListPlanCandidates,
   adminListParticipants,
   adminListWinners,
   adminPlanTodayDraw,
@@ -77,6 +78,10 @@ function AdminPage() {
   const { data: plannedDraw } = useQuery({
     queryKey: ["admin-planned-draw"],
     queryFn: () => adminGetPlannedDraw(),
+  });
+  const { data: planCandidates } = useQuery({
+    queryKey: ["admin-plan-candidates"],
+    queryFn: () => adminListPlanCandidates(),
   });
 
   useEffect(() => {
@@ -156,6 +161,7 @@ function AdminPage() {
   const winners = winnerData?.winners ?? [];
   const testWinners = winners.filter((winner: any) => winner.is_test);
   const productionWinners = winners.filter((winner: any) => !winner.is_test);
+  const plannedCandidateUsers = planCandidates?.users ?? [];
 
   const testDrawIds = useMemo(() => [...new Set(testWinners.map((winner: any) => winner.draw_id))], [testWinners]);
 
@@ -258,8 +264,8 @@ function AdminPage() {
               className="w-full rounded-lg bg-[oklch(0.09_0.01_40)] border border-[oklch(0.55_0.12_82/0.35)] px-3 py-2.5 outline-none"
             >
               <option value="">指定なし</option>
-              {(eligible?.daily ?? []).map((row: any) => (
-                <option key={row.user_id} value={row.user_id}>
+              {plannedCandidateUsers.map((row: any) => (
+                <option key={row.id} value={row.id}>
                   @{row.x_id_normalized}
                 </option>
               ))}
@@ -273,8 +279,8 @@ function AdminPage() {
               className="w-full rounded-lg bg-[oklch(0.09_0.01_40)] border border-[oklch(0.55_0.12_82/0.35)] px-3 py-2.5 outline-none"
             >
               <option value="">指定なし</option>
-              {(eligible?.follow ?? []).map((row: any) => (
-                <option key={row.id ?? row.user_id} value={row.id ?? row.user_id}>
+              {plannedCandidateUsers.map((row: any) => (
+                <option key={row.id} value={row.id}>
                   @{row.x_id_normalized}
                 </option>
               ))}
@@ -393,6 +399,7 @@ function AdminPage() {
 function refreshAdmin(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["admin-eligible"] });
   qc.invalidateQueries({ queryKey: ["admin-planned-draw"] });
+  qc.invalidateQueries({ queryKey: ["admin-plan-candidates"] });
   qc.invalidateQueries({ queryKey: ["admin-recent-draws"] });
   qc.invalidateQueries({ queryKey: ["admin-winners"] });
   qc.invalidateQueries({ queryKey: ["admin-participants"] });

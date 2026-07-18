@@ -323,6 +323,20 @@ export const adminGetPlannedDraw = createServerFn({ method: "GET" })
     return { date, planned: data ?? null };
   });
 
+export const adminListPlanCandidates = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select("id,x_id_display,x_id_normalized,participation_count,win_count,confirm_gauge,redemption_rate")
+      .order("x_id_normalized", { ascending: true })
+      .limit(1000);
+    if (error) throw error;
+    return { users: data ?? [] };
+  });
+
 export const adminPlanTodayDraw = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
