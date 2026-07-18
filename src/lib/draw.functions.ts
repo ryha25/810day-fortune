@@ -305,6 +305,47 @@ export const adminTodayEligible = createServerFn({ method: "GET" })
     return { date, daily, follow };
   });
 
+export const adminGetPlannedDraw = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const date = todayJst();
+    const { data, error } = await supabaseAdmin
+      .from("planned_lottery_draws")
+      .select("draw_date,daily_winner_user_id,follow_winner_user_id,planned_at,updated_at")
+      .eq("draw_date", date)
+      .maybeSingle();
+    if (error) {
+      if (error.code === "42P01") return { date, planned: null };
+      throw error;
+    }
+    return { date, planned: data ?? null };
+  });
+
+export const adminPlanTodayDraw = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        daily_user_id: z.string().uuid().nullable(),
+        follow_user_id: z.string().uuid().nullable(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: result, error } = await (supabaseAdmin as any).rpc("plan_daily_draw_winners", {
+      _admin_user_id: context.userId,
+      _draw_date: todayJst(),
+      _daily_winner_user_id: data.daily_user_id,
+      _follow_winner_user_id: data.follow_user_id,
+    });
+    if (error) throw error;
+    return result as Record<string, unknown>;
+  });
+
 export const adminListWinners = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {

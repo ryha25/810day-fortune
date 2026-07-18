@@ -269,6 +269,33 @@ export type Database = {
         }
         Relationships: []
       }
+      planned_lottery_draws: {
+        Row: {
+          daily_winner_user_id: string | null
+          draw_date: string
+          follow_winner_user_id: string | null
+          planned_at: string
+          planned_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          daily_winner_user_id?: string | null
+          draw_date: string
+          follow_winner_user_id?: string | null
+          planned_at?: string
+          planned_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          daily_winner_user_id?: string | null
+          draw_date?: string
+          follow_winner_user_id?: string | null
+          planned_at?: string
+          planned_by?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           auth_token: string | null
@@ -380,6 +407,15 @@ export type Database = {
       }
       record_daily_post_participation: {
         Args: { _participation_date?: string | null; _user_id: string }
+        Returns: Json
+      }
+      plan_daily_draw_winners: {
+        Args: {
+          _admin_user_id: string
+          _daily_winner_user_id?: string | null
+          _draw_date: string
+          _follow_winner_user_id?: string | null
+        }
         Returns: Json
       }
       record_official_follow_auto_participations: {

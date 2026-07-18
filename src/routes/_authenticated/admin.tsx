@@ -9,8 +9,10 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   adminCancelTestDraw,
   adminDeleteParticipant,
+  adminGetPlannedDraw,
   adminListParticipants,
   adminListWinners,
+  adminPlanTodayDraw,
   adminRunTestDraw,
   adminTodayEligible,
   adminUpdateLotterySettings,
@@ -49,6 +51,8 @@ function AdminPage() {
   const [cutoffTime, setCutoffTime] = useState("11:59");
   const [normalReward, setNormalReward] = useState("10000");
   const [wReward, setWReward] = useState("200000");
+  const [plannedDailyId, setPlannedDailyId] = useState("");
+  const [plannedFollowId, setPlannedFollowId] = useState("");
 
   const { data: eligible, refetch: refetchEligible } = useQuery({
     queryKey: ["admin-eligible"],
@@ -70,6 +74,10 @@ function AdminPage() {
     queryKey: ["lottery-settings"],
     queryFn: () => getLotterySettings(),
   });
+  const { data: plannedDraw } = useQuery({
+    queryKey: ["admin-planned-draw"],
+    queryFn: () => adminGetPlannedDraw(),
+  });
 
   useEffect(() => {
     if (!lotterySettings) return;
@@ -78,6 +86,12 @@ function AdminPage() {
     setNormalReward(String(lotterySettings.normal_base_reward_inmu ?? 10000));
     setWReward(String(lotterySettings.w_reward_inmu ?? 200000));
   }, [lotterySettings]);
+
+  useEffect(() => {
+    const planned = plannedDraw?.planned as any;
+    setPlannedDailyId(planned?.daily_winner_user_id ?? "");
+    setPlannedFollowId(planned?.follow_winner_user_id ?? "");
+  }, [plannedDraw?.planned]);
 
   const updateSettings = useMutation({
     mutationFn: () => {
@@ -111,6 +125,24 @@ function AdminPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "テスト抽選に失敗しました"),
   });
 
+  const planDraw = useMutation({
+    mutationFn: () =>
+      adminPlanTodayDraw({
+        data: {
+          daily_user_id: plannedDailyId || null,
+          follow_user_id: plannedFollowId || null,
+        },
+      }),
+    onSuccess: (res: any) => {
+      if (res?.ok === false && res.reason === "already_drawn") toast.error("本日の本番抽選はすでに確定済みです。");
+      else if (res?.ok === false && res.reason === "daily_not_eligible") toast.error("毎日投稿枠の指定ユーザーが対象外です。");
+      else if (res?.ok === false && res.reason === "follow_not_eligible") toast.error("公式フォロー枠の指定ユーザーが対象外です。");
+      else toast.success("本日の当選予定を保存しました");
+      refreshAdmin(qc);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "当選予定の保存に失敗しました"),
+  });
+
   const cancelTest = useMutation({
     mutationFn: (drawId: string) => adminCancelTestDraw({ data: { draw_id: drawId } }),
     onSuccess: (res: any) => {
@@ -130,6 +162,15 @@ function AdminPage() {
   function handleRunTestDraw() {
     if (!window.confirm("現在の抽選対象者でテスト抽選を実行します。ユーザーデータへテスト結果が反映されます。よろしいですか？")) return;
     runTest.mutate();
+  }
+
+  function handlePlanDraw() {
+    if (!plannedDailyId && !plannedFollowId) {
+      if (!window.confirm("当選者指定を空にして保存します。抽選時刻には通常のランダム抽選になります。よろしいですか？")) return;
+    } else if (!window.confirm("本日の当選者を事前指定します。ユーザーには抽選時刻まで通常通り未発表に見えます。よろしいですか？")) {
+      return;
+    }
+    planDraw.mutate();
   }
 
   return (
@@ -202,6 +243,55 @@ function AdminPage() {
           <p className="text-xs text-muted-foreground mb-3">抽選日: {eligible?.date ?? "-"}</p>
           <EligibleList title="毎日投稿枠" rows={eligible?.daily ?? []} empty="毎日投稿枠：対象者なし" />
           <EligibleList title="公式Xフォロー枠" rows={eligible?.follow ?? []} empty="公式Xフォロー枠：対象者なし" />
+        </section>
+
+        <section className="card-luxe rounded-2xl p-5 space-y-3">
+          <h2 className="font-display text-xl text-gold-gradient">本番抽選の事前指定</h2>
+          <p className="text-xs text-muted-foreground">
+            ここで選んだ当選者は保存だけされ、抽選時刻に通常の本番抽選結果として発表されます。
+          </p>
+          <label className="block text-sm">
+            <span className="block text-xs font-semibold mb-1.5 text-[oklch(0.82_0.15_88)]">毎日投稿枠</span>
+            <select
+              value={plannedDailyId}
+              onChange={(e) => setPlannedDailyId(e.target.value)}
+              className="w-full rounded-lg bg-[oklch(0.09_0.01_40)] border border-[oklch(0.55_0.12_82/0.35)] px-3 py-2.5 outline-none"
+            >
+              <option value="">指定なし</option>
+              {(eligible?.daily ?? []).map((row: any) => (
+                <option key={row.user_id} value={row.user_id}>
+                  @{row.x_id_normalized}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="block text-xs font-semibold mb-1.5 text-[oklch(0.82_0.15_88)]">公式フォロー枠</span>
+            <select
+              value={plannedFollowId}
+              onChange={(e) => setPlannedFollowId(e.target.value)}
+              className="w-full rounded-lg bg-[oklch(0.09_0.01_40)] border border-[oklch(0.55_0.12_82/0.35)] px-3 py-2.5 outline-none"
+            >
+              <option value="">指定なし</option>
+              {(eligible?.follow ?? []).map((row: any) => (
+                <option key={row.id ?? row.user_id} value={row.id ?? row.user_id}>
+                  @{row.x_id_normalized}
+                </option>
+              ))}
+            </select>
+          </label>
+          {plannedDraw?.planned && (
+            <p className="text-xs text-muted-foreground">
+              保存済み: {new Date((plannedDraw.planned as any).updated_at).toLocaleString("ja-JP")}
+            </p>
+          )}
+          <button
+            onClick={handlePlanDraw}
+            disabled={planDraw.isPending}
+            className="btn-gold w-full rounded-lg py-3 font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            <Save className="h-4 w-4" /> 当選予定を保存
+          </button>
         </section>
 
         <section className="card-luxe rounded-2xl p-5 space-y-3">
@@ -302,6 +392,7 @@ function AdminPage() {
 
 function refreshAdmin(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["admin-eligible"] });
+  qc.invalidateQueries({ queryKey: ["admin-planned-draw"] });
   qc.invalidateQueries({ queryKey: ["admin-recent-draws"] });
   qc.invalidateQueries({ queryKey: ["admin-winners"] });
   qc.invalidateQueries({ queryKey: ["admin-participants"] });
